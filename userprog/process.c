@@ -424,6 +424,62 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }
 
+static void
+stack_align (void **esp)
+{
+  /* align to size of int */
+  *esp -= (intptr_t) *esp % sizeof (int);
+}
+
+static void
+stack_push_data (void **esp, void *data, off_t size)
+{
+  /* null ptr checks */
+  ASSERT (esp != NULL);
+  ASSERT (*esp != NULL);
+
+  /* size should not be negative, but may be zero (we will just return) */
+  ASSERT (size >= 0);
+  if (size == 0) {
+    return;
+  }
+
+  /* stack alignment */
+  ASSERT ((intptr_t) *esp % sizeof (int) == 0);
+
+  /* stack must be below PHYS_BASE */
+  ASSERT (*esp <= PHYS_BASE);
+
+  /* TODO: assert no stack overflow */
+
+  *esp -= size;
+  stack_align (esp);
+
+  memcpy (*esp, data, size);
+}
+
+static void
+stack_push_int (void *esp, int data)
+{
+  stack_push_data (esp, &data, sizeof (data));
+}
+
+static void
+stack_push_ptr (void *esp, void *ptr)
+{
+  stack_push_data (esp, &ptr, sizeof (ptr));
+}
+
+static void
+stack_push_str (void *esp, char *data)
+{
+  /* we will refuse to push strings that don't exist */
+  ASSERT (data != NULL);
+
+  off_t size = strlen(data) + 1; /* null terminated */
+  stack_push_data (esp, data, size);
+}
+
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
