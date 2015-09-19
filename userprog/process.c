@@ -25,12 +25,27 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
+
+void
+pushArgs (char *list)
+{
+  char *arg;
+  arg = strtok(&list, " ");
+  
+  while(arg != NULL) {
+	// push arg	
+	arg = strtok(NULL, " ");
+}
+return;
+}
+
 tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
   tid_t tid;
-
+  char *bufferPointer;
+   
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
