@@ -4,9 +4,22 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-#include "threads/init.h"
+#include "devices/shutdown.h"
 
 static void syscall_handler (struct intr_frame *);
+
+/* generate function signature for syscall */
+#define SYSCALL_FUNC(name)   \
+syscall_handler_ ## name (     \
+  void *arg0 UNUSED,          \
+  void *arg1 UNUSED,          \
+  void *arg2 UNUSED,          \
+  struct intr_frame *f UNUSED \
+)
+
+/* using within syscall to verify arguments */
+#define CHECK_ARGS(num) \
+  check_user_mem (arg0, num * sizeof (arg0));
 
 static void
 check_user_mem (void *addr, size_t size)
@@ -23,20 +36,52 @@ syscall_init (void)
 }
 
 static void
-syscall_handler_halt (void)
+SYSCALL_FUNC(halt)
 {
   shutdown_power_off ();
 }
 
 static void
-syscall_handler_exit (void *arg0, struct intr_frame *f UNUSED)
+SYSCALL_FUNC(exit)
 {
-  /* check that all arguments are valid */
-  check_user_mem (arg0, sizeof (arg0));
+  CHECK_ARGS(1);
+  /* TODO: return status code
+  int status = *(int *) arg0;
+  */
 
-  /* TODO: find out how to return status */
   thread_exit ();
 }
+
+static void
+SYSCALL_FUNC(write)
+{
+  CHECK_ARGS(3);
+  int fd          = *(int *) arg0;
+  const void *buf = *(void **) arg1;
+  size_t count    = *(size_t *) arg2;
+
+  /* verify entire user provided buffer is valid */
+  check_user_mem ((void *) buf, count);
+
+  /* sanity check fd */
+  if (fd < 0 || fd > MAX_FD) {
+    f->eax = -1;
+    return;
+  } else if (fd == 1 || fd == 2) {
+    putbuf (buf, count);
+    f->eax = count;
+    return;
+  }
+
+  /* TODO: implement write for other fds */
+  f->eax = -1;
+  return;
+}
+
+/* used to generate switch statement code */
+#define SYSCALL_CALL(name)                       \
+  syscall_handler_ ## name (arg0, arg1, arg2, f); \
+  break;
 
 static void
 syscall_handler (struct intr_frame *f) 
@@ -50,11 +95,9 @@ syscall_handler (struct intr_frame *f)
 
   /* look up vector number in table */
   switch (*call) {
-  case SYS_HALT:
-    syscall_handler_halt ();
-  case SYS_EXIT:
-    syscall_handler_exit (arg0, f);
-    break;
+  case SYS_HALT:  SYSCALL_CALL(halt);
+  case SYS_EXIT:  SYSCALL_CALL(exit);
+  case SYS_WRITE: SYSCALL_CALL(write);
   }
 }
 
