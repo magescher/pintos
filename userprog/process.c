@@ -21,23 +21,14 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+static void stack_push_int (void **esp, int data);
+static void stack_push_ptr (void **esp, void *data);
+static void stack_push_str (void **esp, char *data);
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
-
-void
-pushArgs (char *list)
-{
-  char *arg;
-  arg = strtok(&list, " ");
-  
-  while(arg != NULL) {
-	// push arg	
-	arg = strtok(NULL, " ");
-}
-return;
-}
 
 tid_t
 process_execute (const char *file_name) 
@@ -62,24 +53,70 @@ process_execute (const char *file_name)
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *args_)
 {
-  char *file_name = file_name_;
+  char *args = args_;
   struct intr_frame if_;
   bool success;
+
+  /* strip off program name from args str */
+  char *arg0 = args;
+  char *c = strchr (args, ' ');
+  if (c != NULL) {
+    *c = '\0';
+    args = c + 1;
+  } else {
+    args = "";
+  }
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (arg0, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success) 
-    thread_exit ();
+  if (!success) {
+    goto fail;
+  }
 
+  /* push full args string, save ptr */
+  stack_push_str (&if_.esp, args);
+  char *user_ptr_args = if_.esp;
+
+  /* push full program name, save ptr */
+  stack_push_str (&if_.esp, arg0);
+  char *user_ptr_arg0 = if_.esp;
+
+  /* null terminate our array */
+  stack_push_ptr (&if_.esp, 0);
+
+  int argc = 0;
+  size_t arg_len = strlen(args);
+  while (arg_len > 0) {
+    if (user_ptr_args[arg_len] == ' ') {
+      user_ptr_args[arg_len] = '\0';
+      stack_push_ptr (&if_.esp, &user_ptr_args[arg_len+1]);
+      argc++;
+    }
+    arg_len--;
+  }
+  stack_push_ptr (&if_.esp, user_ptr_args);
+  argc++;
+
+  /* push program name */
+  stack_push_ptr (&if_.esp, user_ptr_arg0);
+  argc++;
+
+  /* push argv ptr */
+  stack_push_ptr (&if_.esp, if_.esp);
+
+  /* push argc and bogus return address */
+  stack_push_int (&if_.esp, argc);
+  stack_push_ptr (&if_.esp, 0);
+
+  palloc_free_page (arg0);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -88,6 +125,10 @@ start_process (void *file_name_)
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
+
+fail:
+  palloc_free_page (arg0);
+  thread_exit ();
 }
 
 /* Waits for thread TID to die and returns its exit status.  If
@@ -102,6 +143,9 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  while (1) {
+    /* pass */
+  }
   return -1;
 }
 
@@ -473,19 +517,19 @@ stack_push_data (void **esp, void *data, off_t size)
 }
 
 static void
-stack_push_int (void *esp, int data)
+stack_push_int (void **esp, int data)
 {
   stack_push_data (esp, &data, sizeof (data));
 }
 
 static void
-stack_push_ptr (void *esp, void *ptr)
+stack_push_ptr (void **esp, void *ptr)
 {
   stack_push_data (esp, &ptr, sizeof (ptr));
 }
 
 static void
-stack_push_str (void *esp, char *data)
+stack_push_str (void **esp, char *data)
 {
   /* we will refuse to push strings that don't exist */
   ASSERT (data != NULL);
