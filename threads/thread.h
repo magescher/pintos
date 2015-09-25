@@ -98,6 +98,7 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct hash fds;                    /* File descriptor table. */
+    int rc;                             /* Return code. */
 #endif
 
     /* Owned by thread.c. */

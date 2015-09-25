@@ -18,6 +18,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#include "devices/timer.h"
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -143,9 +145,8 @@ fail:
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  while (1) {
-    /* TODO: implement real process wait */
-  }
+  /* TODO: implement real process wait */
+  timer_msleep (50);
   return -1;
 }
 
@@ -155,6 +156,10 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  char *dummy;
+  strtok_r (cur->name, " ", &dummy);
+  printf("%s: exit(%d)\n", cur->name, cur->rc);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

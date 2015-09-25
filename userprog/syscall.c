@@ -75,9 +75,10 @@ static void
 SYSCALL_FUNC(exit)
 {
   CHECK_ARGS(1);
-  /* TODO: return status code
+  // TODO: return status code
   int status = *(int *) arg0;
-  */
+  struct thread *t = thread_current ();
+  t->rc = status;
 
   thread_exit ();
 }
