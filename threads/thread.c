@@ -147,6 +147,21 @@ thread_print_stats (void)
           idle_ticks, kernel_ticks, user_ticks);
 }
 
+unsigned
+fd_hash (const struct hash_elem *p, void *t UNUSED)
+{
+  const struct fd *e = hash_entry (p, struct fd, hash_elem);
+  return (unsigned) e->fd;
+}
+
+bool
+fd_less (const struct hash_elem *a, const struct hash_elem *b, void *t UNUSED)
+{
+  struct fd *x = hash_entry (a, struct fd, hash_elem);
+  struct fd *y = hash_entry (b, struct fd, hash_elem);
+  return x->fd < y->fd;
+}
+
 /* Creates a new kernel thread named NAME with the given initial
    PRIORITY, which executes FUNCTION passing AUX as the argument,
    and adds it to the ready queue.  Returns the thread identifier
@@ -203,6 +218,8 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
+
+  hash_init (&t->fds, fd_hash, fd_less, t);
 
   intr_set_level (old_level);
 
