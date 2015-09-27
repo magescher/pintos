@@ -59,17 +59,14 @@ fail:
 static void
 check_user_str (const char *str)
 {
+  // TODO: consider optimizing this function
   if (str == NULL) {
     thread_exit ();
   }
-  size_t delta = PHYS_BASE - (void *) str;
-  while (delta > 0 && *str != 0) {
+  do {
+    check_user_mem ((void *) str, sizeof(char));
     str++;
-    delta--;
-  }
-  if (delta <= 0) {
-    thread_exit ();
-  }
+  } while (*str != 0);
 }
 
 static struct fd *
