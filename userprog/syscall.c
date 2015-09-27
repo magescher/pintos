@@ -4,6 +4,7 @@
 #include <string.h>
 #include <hash.h>
 #include "userprog/process.h"
+#include "userprog/pagedir.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -32,9 +33,27 @@ syscall_handler_ ## name (     \
 static void
 check_user_mem (void *addr, size_t size)
 {
-  if (addr + size >= PHYS_BASE) {
-    thread_exit ();
+  if (size == 0) {
+    return;
   }
+
+  void *end = addr + size;
+  if (!is_user_vaddr(addr)) {
+    goto fail;
+  }
+
+  uint32_t *pagedir = thread_current ()->pagedir;
+  for (; addr < end; addr += PGSIZE) {
+    void *pg = pagedir_get_page (pagedir, addr);
+    if (pg == NULL) {
+      goto fail;
+    }
+  }
+
+  return;
+
+fail:
+  thread_exit ();
 }
 
 static void
@@ -79,7 +98,7 @@ static void
 SYSCALL_FUNC(exit)
 {
   CHECK_ARGS(1);
-  // TODO: return status code
+
   int status = *(int *) arg0;
   struct thread *t = thread_current ();
   t->rc = status;
@@ -164,7 +183,16 @@ SYSCALL_FUNC(open)
   }
 
   struct thread *t = thread_current ();
-  fd->fd = t->fds.elem_cnt + 3;
+
+  struct hash_iterator i;
+  hash_first (&i, &t->fds);
+  unsigned maxfd = 0;
+  while (hash_next (&i)) {
+    struct fd *file = hash_entry (hash_cur (&i), struct fd, hash_elem);
+    if (file->fd > maxfd) maxfd = file->fd;
+  }
+
+  fd->fd = (maxfd == 0) ? 3 : maxfd;
   hash_insert (&t->fds, &fd->hash_elem);
   f->eax = fd->fd;
   return;
@@ -286,7 +314,7 @@ SYSCALL_FUNC(close)
 static void
 syscall_handler (struct intr_frame *f) 
 {
-  int *call = &((int *) f->esp)[0];
+  int *call  = &((int   *) f->esp)[0];
   void *arg0 = &((void **) f->esp)[1];
   void *arg1 = &((void **) f->esp)[2];
   void *arg2 = &((void **) f->esp)[3];
