@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 
 #include "devices/timer.h"
 
@@ -32,24 +33,41 @@ static void stack_push_str (void **esp, char *data);
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 
+typedef struct pstart {
+  struct semaphore *sync;               /* Synchronization for process_start. */
+  bool *success;                        /* Boolean to determine if process_start succeeded. */
+  char cmd[PGSIZE - 2 * sizeof(void*)]; /* Executable and arguments, pad to whole page. */
+} pstart_t;
+
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  pstart_t *aux = palloc_get_page (0);
+  if (aux == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+
+  /* copy length dependent on elements of aux struct */
+  strlcpy (aux->cmd, file_name, sizeof(aux->cmd));
+
+  bool success = false;
+  struct semaphore sync;
+  sema_init (&sync, 0);
+
+  aux->sync    = &sync;
+  aux->success = &success;
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
-  return tid;
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, aux);
+  if (tid == TID_ERROR) {
+    palloc_free_page (aux);
+  } else {
+    sema_down (aux->sync);
+  }
+  return (success) ? tid : TID_ERROR;
 }
 
 /* A thread function that loads a user process and starts it
@@ -57,11 +75,12 @@ process_execute (const char *file_name)
 static void
 start_process (void *args_)
 {
-  char *args = args_;
+  pstart_t *aux = (pstart_t *) args_;
   struct intr_frame if_;
   bool success;
 
   /* strip off program name from args str */
+  char *args = aux->cmd;
   char *arg0 = args;
   char *c = strchr (args, ' ');
   if (c != NULL) {
@@ -126,7 +145,10 @@ start_process (void *args_)
   stack_push_int (&if_.esp, argc);
   stack_push_ptr (&if_.esp, 0);
 
-  palloc_free_page (arg0);
+  *(aux->success) = true;
+  sema_up (aux->sync);
+
+  palloc_free_page (args_);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -137,7 +159,9 @@ start_process (void *args_)
   NOT_REACHED ();
 
 fail:
-  palloc_free_page (arg0);
+  *(aux->success) = false;
+  sema_up (aux->sync);
+  palloc_free_page (args_);
   thread_exit ();
 }
 
@@ -153,12 +177,16 @@ fail:
 int
 process_wait (tid_t child_tid)
 {
+  enum intr_level old_level = intr_disable ();
+
   struct thread *t = thread_lookup (child_tid);
   struct thread *current = thread_current ();
   if (t == NULL || t->parent != current) {
     return -1;
   }
   sema_down (&t->run_sema);
+
+  intr_set_level (old_level);
   return t->rc;
 }
 
