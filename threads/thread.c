@@ -220,6 +220,7 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
   hash_init (&t->fds, fd_hash, fd_less, t);
+  t->parent = thread_current ();
 
   intr_set_level (old_level);
 
@@ -311,6 +312,8 @@ thread_exit (void)
   process_exit ();
 #endif
 
+  sema_up (&thread_current()->run_sema);
+
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
@@ -354,6 +357,23 @@ thread_foreach (thread_action_func *func, void *aux)
       struct thread *t = list_entry (e, struct thread, allelem);
       func (t, aux);
     }
+}
+
+struct thread*
+thread_lookup (tid_t tid)
+{
+  struct list_elem *e;
+
+  for (e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, allelem);
+      if (t->tid == tid) {
+        return t;
+      }
+    }
+
+  return NULL;
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -486,6 +506,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  sema_init (&t->run_sema, 0);
+  t->rc = -1;
+
   list_push_back (&all_list, &t->allelem);
 }
 

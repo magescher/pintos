@@ -95,17 +95,25 @@ start_process (void *args_)
   stack_push_ptr (&if_.esp, 0);
 
   int argc = 0;
-  size_t arg_len = strlen(args);
-  while (arg_len > 0) {
+  bool word = false;
+  int arg_len = strlen(args) - 1;
+  while (arg_len >= 0) {
     if (user_ptr_args[arg_len] == ' ') {
       user_ptr_args[arg_len] = '\0';
-      stack_push_ptr (&if_.esp, &user_ptr_args[arg_len+1]);
-      argc++;
+      if (word) {
+        stack_push_ptr (&if_.esp, &user_ptr_args[arg_len+1]);
+        argc++;
+      }
+      word = false;
+    } else {
+      word = true;
     }
     arg_len--;
   }
-  stack_push_ptr (&if_.esp, user_ptr_args);
-  argc++;
+  if (word) {
+    stack_push_ptr (&if_.esp, user_ptr_args);
+    argc++;
+  }
 
   /* push program name */
   stack_push_ptr (&if_.esp, user_ptr_arg0);
@@ -143,11 +151,15 @@ fail:
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid)
 {
-  /* TODO: implement real process wait */
-  timer_msleep (50);
-  return -1;
+  struct thread *t = thread_lookup (child_tid);
+  struct thread *current = thread_current ();
+  if (t == NULL || t->parent != current) {
+    return -1;
+  }
+  sema_down (&t->run_sema);
+  return t->rc;
 }
 
 /* Free the current process's resources. */

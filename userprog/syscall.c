@@ -3,6 +3,7 @@
 #include <syscall-nr.h>
 #include <string.h>
 #include <hash.h>
+#include "userprog/process.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -39,6 +40,9 @@ check_user_mem (void *addr, size_t size)
 static void
 check_user_str (const char *str)
 {
+  if (str == NULL) {
+    thread_exit ();
+  }
   size_t delta = PHYS_BASE - (void *) str;
   while (delta > 0 && *str != 0) {
     str++;
@@ -81,6 +85,26 @@ SYSCALL_FUNC(exit)
   t->rc = status;
 
   thread_exit ();
+}
+
+static void
+SYSCALL_FUNC(exec)
+{
+  CHECK_ARGS(1);
+  const char *cmd = *(char **) arg0;
+
+  check_user_str (cmd);
+
+  f->eax = process_execute (cmd);
+}
+
+static void
+SYSCALL_FUNC(wait)
+{
+  CHECK_ARGS(1);
+  tid_t tid = *(tid_t *) arg0;
+
+  f->eax = process_wait (tid);
 }
 
 static void
@@ -140,6 +164,7 @@ SYSCALL_FUNC(open)
   }
 
   struct thread *t = thread_current ();
+  fd->fd = t->fds.elem_cnt + 3;
   hash_insert (&t->fds, &fd->hash_elem);
   f->eax = fd->fd;
   return;
@@ -272,6 +297,8 @@ syscall_handler (struct intr_frame *f)
   switch (*call) {
   case SYS_HALT:     SYSCALL_CALL(halt);
   case SYS_EXIT:     SYSCALL_CALL(exit);
+  case SYS_EXEC:     SYSCALL_CALL(exec);
+  case SYS_WAIT:     SYSCALL_CALL(wait);
   case SYS_CREATE:   SYSCALL_CALL(create);
   case SYS_REMOVE:   SYSCALL_CALL(remove);
   case SYS_OPEN:     SYSCALL_CALL(open);
