@@ -177,17 +177,20 @@ fail:
 int
 process_wait (tid_t child_tid)
 {
+  int rc = -1;
   enum intr_level old_level = intr_disable ();
 
   struct thread *t = thread_lookup (child_tid);
   struct thread *current = thread_current ();
   if (t == NULL || t->parent != current) {
-    return -1;
+    goto done;
   }
   sema_down (&t->run_sema);
+  rc = t->rc;
 
+done:
   intr_set_level (old_level);
-  return t->rc;
+  return rc;
 }
 
 /* Free the current process's resources. */
