@@ -17,6 +17,8 @@
 
 static void syscall_handler (struct intr_frame *);
 
+static struct lock syscall_lock;
+
 /* generate function signature for syscall */
 #define SYSCALL_FUNC(name)   \
 syscall_handler_ ## name (     \
@@ -83,6 +85,7 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init (&syscall_lock);
 }
 
 static void
@@ -111,7 +114,9 @@ SYSCALL_FUNC(exec)
 
   check_user_str (cmd);
 
+  lock_acquire (&syscall_lock);
   f->eax = process_execute (cmd);
+  lock_release (&syscall_lock);
 }
 
 static void
@@ -137,7 +142,9 @@ SYSCALL_FUNC(create)
     return;
   }
 
+  lock_acquire (&syscall_lock);
   f->eax = filesys_create (file, size);
+  lock_release (&syscall_lock);
   return;
 }
 
@@ -154,7 +161,9 @@ SYSCALL_FUNC(remove)
     return;
   }
 
+  lock_acquire (&syscall_lock);
   f->eax = filesys_remove (file);
+  lock_release (&syscall_lock);
   return;
 }
 
@@ -172,7 +181,9 @@ SYSCALL_FUNC(open)
     return;
   }
 
+  lock_acquire (&syscall_lock);
   fd->file = filesys_open (file);
+  lock_release (&syscall_lock);
   if (fd->file == NULL) {
     free (fd);
     f->eax = -1;
@@ -180,6 +191,8 @@ SYSCALL_FUNC(open)
   }
 
   struct thread *t = thread_current ();
+
+  lock_acquire (&syscall_lock);
 
   struct hash_iterator i;
   hash_first (&i, &t->fds);
@@ -191,6 +204,9 @@ SYSCALL_FUNC(open)
 
   fd->fd = (maxfd == 0) ? 3 : maxfd;
   hash_insert (&t->fds, &fd->hash_elem);
+
+  lock_release (&syscall_lock);
+
   f->eax = fd->fd;
   return;
 }
@@ -204,7 +220,9 @@ SYSCALL_FUNC(filesize)
   struct fd *file = fd_lookup (fd);
 
   if (file != NULL) {
+    lock_acquire (&syscall_lock);
     f->eax = file_length (file->file);
+    lock_release (&syscall_lock);
   } else {
     f->eax = -1;
   }
@@ -229,7 +247,9 @@ SYSCALL_FUNC(read)
     struct fd *file = fd_lookup (fd);
 
     if (file != NULL) {
+      lock_acquire (&syscall_lock);
       f->eax = file_read (file->file, buf, size);
+      lock_release (&syscall_lock);
     } else {
       f->eax = -1;
     }
@@ -253,7 +273,9 @@ SYSCALL_FUNC(write)
     struct fd *file = fd_lookup (fd);
 
     if (file != NULL) {
+      lock_acquire (&syscall_lock);
       f->eax = file_write (file->file, buf, size);
+      lock_release (&syscall_lock);
     } else {
       f->eax = -1;
     }
@@ -270,7 +292,9 @@ SYSCALL_FUNC(seek)
   struct fd *file = fd_lookup (fd);
 
   if (file != NULL) {
+    lock_acquire (&syscall_lock);
     file_seek (file->file, pos);
+    lock_release (&syscall_lock);
   }
 }
 
@@ -283,7 +307,9 @@ SYSCALL_FUNC(tell)
   struct fd *file = fd_lookup(fd);
 
   if (file != NULL) {
+    lock_acquire (&syscall_lock);
     f->eax = file_tell (file->file);
+    lock_release (&syscall_lock);
   } else {
     f->eax = -1;
   }
@@ -299,7 +325,10 @@ SYSCALL_FUNC(close)
 
   if (file != NULL) {
     struct thread *t = thread_current ();
+
+    lock_acquire (&syscall_lock);
     hash_delete (&t->fds, &file->hash_elem);
+    lock_release (&syscall_lock);
   }
 }
 
