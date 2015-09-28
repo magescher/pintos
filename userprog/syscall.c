@@ -198,11 +198,11 @@ SYSCALL_FUNC(open)
   hash_first (&i, &t->fds);
   unsigned maxfd = 0;
   while (hash_next (&i)) {
-    struct fd *file = hash_entry (hash_cur (&i), struct fd, hash_elem);
-    if (file->fd > maxfd) maxfd = file->fd;
+    struct fd *e = hash_entry (hash_cur (&i), struct fd, hash_elem);
+    if (e->fd > maxfd) maxfd = e->fd;
   }
 
-  fd->fd = (maxfd == 0) ? 3 : maxfd;
+  fd->fd = (maxfd == 0) ? 3 : maxfd + 1;
   hash_insert (&t->fds, &fd->hash_elem);
 
   lock_release (&syscall_lock);
