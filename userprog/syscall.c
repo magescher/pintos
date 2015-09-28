@@ -3,6 +3,8 @@
 #include <syscall-nr.h>
 #include <string.h>
 #include <hash.h>
+#include "userprog/process.h"
+#include "userprog/pagedir.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -31,22 +33,40 @@ syscall_handler_ ## name (     \
 static void
 check_user_mem (void *addr, size_t size)
 {
-  if (addr + size >= PHYS_BASE) {
-    thread_exit ();
+  if (size == 0) {
+    return;
   }
+
+  void *end = addr + size;
+  if (!is_user_vaddr(addr)) {
+    goto fail;
+  }
+
+  uint32_t *pagedir = thread_current ()->pagedir;
+  for (; addr < end; addr += PGSIZE) {
+    void *pg = pagedir_get_page (pagedir, addr);
+    if (pg == NULL) {
+      goto fail;
+    }
+  }
+
+  return;
+
+fail:
+  thread_exit ();
 }
 
 static void
 check_user_str (const char *str)
 {
-  size_t delta = PHYS_BASE - (void *) str;
-  while (delta > 0 && *str != 0) {
-    str++;
-    delta--;
-  }
-  if (delta <= 0) {
+  // TODO: consider optimizing this function
+  if (str == NULL) {
     thread_exit ();
   }
+  do {
+    check_user_mem ((void *) str, sizeof(char));
+    str++;
+  } while (*str != 0);
 }
 
 static struct fd *
@@ -75,12 +95,32 @@ static void
 SYSCALL_FUNC(exit)
 {
   CHECK_ARGS(1);
-  // TODO: return status code
+
   int status = *(int *) arg0;
   struct thread *t = thread_current ();
   t->rc = status;
 
   thread_exit ();
+}
+
+static void
+SYSCALL_FUNC(exec)
+{
+  CHECK_ARGS(1);
+  const char *cmd = *(char **) arg0;
+
+  check_user_str (cmd);
+
+  f->eax = process_execute (cmd);
+}
+
+static void
+SYSCALL_FUNC(wait)
+{
+  CHECK_ARGS(1);
+  tid_t tid = *(tid_t *) arg0;
+
+  f->eax = process_wait (tid);
 }
 
 static void
@@ -140,6 +180,16 @@ SYSCALL_FUNC(open)
   }
 
   struct thread *t = thread_current ();
+
+  struct hash_iterator i;
+  hash_first (&i, &t->fds);
+  unsigned maxfd = 0;
+  while (hash_next (&i)) {
+    struct fd *file = hash_entry (hash_cur (&i), struct fd, hash_elem);
+    if (file->fd > maxfd) maxfd = file->fd;
+  }
+
+  fd->fd = (maxfd == 0) ? 3 : maxfd;
   hash_insert (&t->fds, &fd->hash_elem);
   f->eax = fd->fd;
   return;
@@ -261,7 +311,7 @@ SYSCALL_FUNC(close)
 static void
 syscall_handler (struct intr_frame *f) 
 {
-  int *call = &((int *) f->esp)[0];
+  int *call  = &((int   *) f->esp)[0];
   void *arg0 = &((void **) f->esp)[1];
   void *arg1 = &((void **) f->esp)[2];
   void *arg2 = &((void **) f->esp)[3];
@@ -272,6 +322,8 @@ syscall_handler (struct intr_frame *f)
   switch (*call) {
   case SYS_HALT:     SYSCALL_CALL(halt);
   case SYS_EXIT:     SYSCALL_CALL(exit);
+  case SYS_EXEC:     SYSCALL_CALL(exec);
+  case SYS_WAIT:     SYSCALL_CALL(wait);
   case SYS_CREATE:   SYSCALL_CALL(create);
   case SYS_REMOVE:   SYSCALL_CALL(remove);
   case SYS_OPEN:     SYSCALL_CALL(open);

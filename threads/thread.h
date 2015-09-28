@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include <hash.h>
+#include "synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -97,7 +98,9 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    struct thread *parent;              /* Parent thread. */
     struct hash fds;                    /* File descriptor table. */
+    struct semaphore run_sema;          /* Thread is running. */
     int rc;                             /* Return code. */
 #endif
 
@@ -116,6 +119,9 @@ struct fd
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+unsigned fd_hash (const struct hash_elem *p, void *t UNUSED);
+bool fd_less (const struct hash_elem *a, const struct hash_elem *b, void *t);
 
 void thread_init (void);
 void thread_start (void);
@@ -139,6 +145,7 @@ void thread_yield (void);
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
+struct thread *thread_lookup (tid_t tid);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
