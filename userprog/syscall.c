@@ -327,7 +327,9 @@ SYSCALL_FUNC(close)
     struct thread *t = thread_current ();
 
     lock_acquire (&syscall_lock);
+    file_close (file->file);
     hash_delete (&t->fds, &file->hash_elem);
+    free (file);
     lock_release (&syscall_lock);
   }
 }

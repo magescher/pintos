@@ -123,6 +123,7 @@ struct fd
 extern bool thread_mlfqs;
 
 unsigned fd_hash (const struct hash_elem *p, void *t UNUSED);
+void fd_destroy (struct hash_elem *p, void *t UNUSED);
 bool fd_less (const struct hash_elem *a, const struct hash_elem *b, void *t);
 
 void thread_init (void);
