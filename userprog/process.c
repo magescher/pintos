@@ -207,6 +207,12 @@ process_exit (void)
   strtok_r (cur->name, " ", &dummy);
   printf("%s: exit(%d)\n", cur->name, cur->rc);
 
+  /* Allow file to be written again. */
+  struct file *f = filesys_open (cur->name);
+  if (f != NULL) {
+    file_allow_write (f);
+  }
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -416,6 +422,9 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
+
+  /* Everything worked, mark the file as read-only. */
+  file_deny_write (file);
 
   success = true;
 
