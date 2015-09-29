@@ -102,6 +102,12 @@ start_process (void *args_)
     goto fail;
   }
 
+  struct thread *t = thread_current ();
+  t->file = filesys_open (arg0);
+  if (t->file != NULL) {
+    file_deny_write (t->file);
+  }
+
   /* push full args string, save ptr */
   stack_push_str (&if_.esp, args);
   char *user_ptr_args = if_.esp;
@@ -206,6 +212,9 @@ process_exit (void)
   char *dummy;
   strtok_r (cur->name, " ", &dummy);
   printf("%s: exit(%d)\n", cur->name, cur->rc);
+
+  /* Allow file to be written again. */
+  file_close (cur->file);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
