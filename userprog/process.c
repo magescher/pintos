@@ -102,6 +102,11 @@ start_process (void *args_)
     goto fail;
   }
 
+  struct file *f = filesys_open (arg0);
+  if (f != NULL) {
+    file_deny_write (f);
+  }
+
   /* push full args string, save ptr */
   stack_push_str (&if_.esp, args);
   char *user_ptr_args = if_.esp;
@@ -422,9 +427,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
-
-  /* Everything worked, mark the file as read-only. */
-  file_deny_write (file);
 
   success = true;
 
