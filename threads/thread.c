@@ -11,8 +11,10 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "filesys/file.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -98,6 +100,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  sema_up (&initial_thread->exit_sema);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -152,6 +155,14 @@ fd_hash (const struct hash_elem *p, void *t UNUSED)
 {
   const struct fd *e = hash_entry (p, struct fd, hash_elem);
   return (unsigned) e->fd;
+}
+
+void
+fd_destroy (struct hash_elem *p, void *t UNUSED)
+{
+  const struct fd *e = hash_entry (p, struct fd, hash_elem);
+  file_close (e->file);
+  free ((void *) e);
 }
 
 bool
@@ -318,6 +329,8 @@ thread_exit (void)
   intr_disable ();
 
   struct thread *t = thread_current ();
+  hash_destroy (&t->fds, fd_destroy);
+
   sema_up (&t->run_sema);
 
   thread_foreach (thread_notify_children, t);
