@@ -102,9 +102,10 @@ start_process (void *args_)
     goto fail;
   }
 
-  struct file *f = filesys_open (arg0);
-  if (f != NULL) {
-    file_deny_write (f);
+  struct thread *t = thread_current ();
+  t->file = filesys_open (arg0);
+  if (t->file != NULL) {
+    file_deny_write (t->file);
   }
 
   /* push full args string, save ptr */
@@ -213,10 +214,7 @@ process_exit (void)
   printf("%s: exit(%d)\n", cur->name, cur->rc);
 
   /* Allow file to be written again. */
-  struct file *f = filesys_open (cur->name);
-  if (f != NULL) {
-    file_allow_write (f);
-  }
+  file_close (cur->file);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */

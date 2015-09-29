@@ -99,6 +99,7 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct thread *parent;              /* Parent thread. */
+    struct file *file;                  /* File ptr to executable. */
     struct hash fds;                    /* File descriptor table. */
     struct semaphore run_sema;          /* Thread is running. */
     struct semaphore exit_sema;         /* Thread is allowed to exit. */
