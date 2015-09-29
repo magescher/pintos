@@ -101,6 +101,7 @@ struct thread
     struct thread *parent;              /* Parent thread. */
     struct hash fds;                    /* File descriptor table. */
     struct semaphore run_sema;          /* Thread is running. */
+    struct semaphore exit_sema;         /* Thread is allowed to exit. */
     int rc;                             /* Return code. */
 #endif
 
@@ -146,6 +147,9 @@ void thread_yield (void);
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 struct thread *thread_lookup (tid_t tid);
+
+/* All foreach-able functions. */
+void thread_notify_children (struct thread *t, void *aux);
 
 int thread_get_priority (void);
 void thread_set_priority (int);

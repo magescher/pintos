@@ -182,11 +182,14 @@ process_wait (tid_t child_tid)
 
   struct thread *t = thread_lookup (child_tid);
   struct thread *current = thread_current ();
-  if (t == NULL || t->parent != current) {
+  if (t == NULL || t->parent != current || t->status == THREAD_DYING) {
     goto done;
   }
   sema_down (&t->run_sema);
   rc = t->rc;
+
+  sema_up (&t->exit_sema);
+  t->status = THREAD_DYING;
 
 done:
   intr_set_level (old_level);
