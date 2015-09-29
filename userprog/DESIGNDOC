@@ -1,0 +1,214 @@
+          +--------------------------+
+          |          EE 379K         |
+          | PROJECT 2: USER PROGRAMS |
+          |     DESIGN DOCUMENT      |
+          +--------------------------+
+
+---- GROUP ----
+
+Mitch Hinrichs <mitch.hinrichs@utexas.edu>
+Abigail Johnson <abigailjohnson@utexas.edu>
+Anthony Weems <amlweems@gmail.com>
+
+---- PRELIMINARIES ----
+
+Please let us know if you have any questions.
+
+         ARGUMENT PASSING
+         ================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+/* Used by process.c to pass data from process_execute to start_process. */
+typedef struct pstart
+ {
+   struct semaphore *sync;               /* Synchronization for process_start. */
+   bool *success;                        /* Determine if process_start succeeded. */
+   char cmd[PGSIZE - 2 * sizeof(void*)]; /* Executable and arguments, pad to whole page. */
+ } pstart_t;
+
+---- ALGORITHMS ----
+
+>> A2: Briefly describe how you implemented argument parsing.  How do
+>> you arrange for the elements of argv[] to be in the right order?
+>> How do you avoid overflowing the stack page?
+
+We arranged the arguments in the correct order by going through the argv
+elements in reverse order.  For each space, we pushed the current string onto
+the stack, followed by a null character for termination.  To avoid stack
+overflow, we limit our command line arguments to one page, or 4 KB.
+
+---- RATIONALE ----
+
+>> A3: Why does Pintos implement strtok_r() but not strtok()?
+
+We must use strtok_r() because strtok() is a non-reentrant function.  This
+means that, if interrupted, its behavior is undefined.
+
+>> A4: In Pintos, the kernel separates commands into an executable name
+>> and arguments.  In Unix-like systems, the shell does this
+>> separation.  Identify at least two advantages of the Unix approach.
+
+One advantage is that the kernel is no longer responsible for parsing
+arguments, freeing the kernel’s resources.  Another advantage with the Unix
+approach is that the shell can pass arguments containing spaces and handle more
+complex operations such as file redirection and pipelining.
+
+           SYSTEM CALLS
+           ============
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+/* Global variable used by syscall.c to synchronize all system calls. */
+static struct lock syscall_lock;
+
+/* Used by process.c to manage the current running process. */
+struct thread
+  {
+    /* Owned by thread.c. */
+    tid_t tid;                          /* Thread identifier. */
+    enum thread_status status;          /* Thread state. */
+    char name[16];                      /* Name (for debugging purposes). */
+    uint8_t *stack;                     /* Saved stack pointer. */
+    int priority;                       /* Priority. */
+    struct list_elem allelem;           /* List element for all threads list. */
+
+    /* Shared between thread.c and synch.c. */
+    struct list_elem elem;              /* List element. */
+
+    uint32_t *pagedir;                  /* Page directory. */
++   struct thread *parent;              /* Parent thread. */
++   struct file *file;                  /* File ptr to executable. */
++   struct hash fds;                    /* File descriptor table. */
++   struct semaphore run_sema;          /* Thread is running. */
++   struct semaphore exit_sema;         /* Thread is allowed to exit. */
++   int rc;                             /* Return code from thread. */
+
+    /* Owned by thread.c. */
+    unsigned magic;                     /* Detects stack overflow. */
+  };
+
+/* Used by syscall.c to track all open file descriptors. */
+struct fd
+ {
+   unsigned fd;                        /* File descriptor number assigned by kernel. */
+   struct hash_elem hash_elem;         /* Hash element, used by hash implementation. */
+   struct file *file;                  /* File pointer from the filesys component. */
+ };
+
+>> B2: Describe how file descriptors are associated with open files.
+>> Are file descriptors unique within the entire OS or just within a
+>> single process?
+
+File descriptors are associated with open files using a hash table contained
+with the thread struct.  This means that the fd associated with a particular
+process is unique to that individual process.
+
+---- ALGORITHMS ----
+
+>> B3: Describe your code for reading and writing user data from the
+>> kernel.
+
+We verify that it is a user virtual address via is_user_vaddr() from
+thread/vaddr.h.  Next, we verify that the user address is mapped by looking it
+up in the page directory belonging to the process.  If the user’s data is an
+array, we perform the same process per page within the array.
+
+>> B4: Suppose a system call causes a full page (4,096 bytes) of data
+>> to be copied from user space into the kernel.  What is the least
+>> and the greatest possible number of inspections of the page table
+>> (e.g. calls to pagedir_get_page()) that might result?  What about
+>> for a system call that only copies 2 bytes of data?  Is there room
+>> for improvement in these numbers, and how much?
+
+A system that copies a full page from user space into the kernel will inspect
+the page table at least once if the data is page aligned, and twice otherwise.
+This is also true for a 2 byte copy because the first byte can exist in 1 page
+and the second in another.  We do not see any room for improvement as the odds
+of two inspections for a two byte copy are low, 1/4096.
+
+>> B5: Briefly describe your implementation of the "wait" system call
+>> and how it interacts with process termination.
+
+If a child process is not dying, the parent will call sema_down() on the
+child’s run_sema.  When the child exits, it calls sema_up() on this semaphore
+which notifies the parent that the child is terminating.  At this point, the
+child waits for permission to exit from the parent by calling sema_down() on
+its exit_sema.  The parent then calls sema_up() on the child’s exit_sema
+allowing the child to terminate.
+
+>> B6: Any access to user program memory at a user-specified address
+>> can fail due to a bad pointer value.  Such accesses must cause the
+>> process to be terminated.  System calls are fraught with such
+>> accesses, e.g. a "write" system call requires reading the system
+>> call number from the user stack, then each of the call's three
+>> arguments, then an arbitrary amount of user memory, and any of
+>> these can fail at any point.  This poses a design and
+>> error-handling problem: how do you best avoid obscuring the primary
+>> function of code in a morass of error-handling?  Furthermore, when
+>> an error is detected, how do you ensure that all temporarily
+>> allocated resources (locks, buffers, etc.) are freed?  In a few
+>> paragraphs, describe the strategy or strategies you adopted for
+>> managing these issues.  Give an example.
+
+All user data is verified prior to any system call work.  Additionally, we
+provide a macro for verifying system call arguments.  For example,
+syscall_handler_open() verifies that the single argument is a valid char
+pointer by calling CHECK_ARGS(1) and verifies that the string is a valid user
+string by calling check_user_str().
+
+---- SYNCHRONIZATION ----
+
+>> B7: The "exec" system call returns -1 if loading the new executable
+>> fails, so it cannot return before the new executable has completed
+>> loading.  How does your code ensure this?  How is the load
+>> success/failure status passed back to the thread that calls "exec"?
+
+We create auxiliary data for start_process containing a synchronization
+semaphore, a boolean for success or failure, and the command.  process_execute
+uses the semaphore to wait until the status is known, and then returns this
+status.
+
+>> B8: Consider parent process P with child process C.  How do you
+>> ensure proper synchronization and avoid race conditions when P
+>> calls wait(C) before C exits?  After C exits?  How do you ensure
+>> that all resources are freed in each case?  How about when P
+>> terminates without waiting, before C exits?  After C exits?  Are
+>> there any special cases?
+
+When exiting, a process notifies its parent of its exit, then the process
+iterates through all of its children and gives them permission to free their
+resources.  Before the process frees its resources, it waits for permission
+from its parent.  The initial process is given permission from the kernel to
+free its resources without waiting.  When a parent calls wait on its child, it
+allows the child to free its resources after the child exits.  
+
+---- RATIONALE ----
+
+>> B9: Why did you choose to implement access to user memory from the
+>> kernel in the way that you did?
+
+We attempted to implement access to user memory from the kernel using the page
+fault method, but it was unnecessarily intensive on resources.  
+
+>> B10: What advantages or disadvantages can you see to your design
+>> for file descriptors?
+
+Our approach ensures that a given file descriptor (fd) will be unique within a
+given process.  This is accomplished by using a hash table.  However, a
+potential disadvantage with using this method is that the space containing the
+hash table must be freed, else it will create a memory leak.
+
+>> B11: The default tid_t to pid_t mapping is the identity mapping.
+>> If you changed it, what advantages are there to your approach?
+
+If we changed tid_t to pid_t, it would allow us to separate the notion of
+threads from the notion of processes.
