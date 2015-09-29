@@ -312,12 +312,17 @@ thread_exit (void)
   process_exit ();
 #endif
 
-  sema_up (&thread_current()->run_sema);
-
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
+
+  struct thread *t = thread_current ();
+  sema_up (&t->run_sema);
+
+  thread_foreach (thread_notify_children, t);
+  sema_down (&t->exit_sema);
+
   list_remove (&thread_current()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
@@ -374,6 +379,15 @@ thread_lookup (tid_t tid)
     }
 
   return NULL;
+}
+
+void
+thread_notify_children (struct thread *t, void *aux)
+{
+  struct thread *parent = (struct thread *) aux;
+  if (t->parent == parent) {
+    sema_up (&t->exit_sema);
+  }
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -508,6 +522,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 
   sema_init (&t->run_sema, 0);
+  sema_init (&t->exit_sema, 0);
   t->rc = -1;
 
   list_push_back (&all_list, &t->allelem);
