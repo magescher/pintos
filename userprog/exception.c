@@ -158,13 +158,14 @@ page_fault (struct intr_frame *f)
           write ? "writing" : "reading",
           user ? "user" : "kernel");
 
-  if (is_stack_push (f->esp, fault_addr)) {
-    uint32_t *pagedir = thread_current ()->pagedir;
-    if (!add_stack_page (pagedir, fault_addr)) {
-      kill (f);
+  if (user) {
+    if (is_stack_push (f->esp, fault_addr)) {
+      uint32_t *pagedir = thread_current ()->pagedir;
+      if (add_stack_page (pagedir, fault_addr)) {
+        return;
+      }
     }
-  } else {
-    kill (f);
   }
+  kill (f);
 }
 
