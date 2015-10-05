@@ -14,6 +14,7 @@
 #include "filesys/directory.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "vm/page.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -30,10 +31,10 @@ syscall_handler_ ## name (     \
 
 /* using within syscall to verify arguments */
 #define CHECK_ARGS(num) \
-  check_user_mem (arg0, num * sizeof (arg0));
+  check_user_mem (f, arg0, num * sizeof (arg0));
 
 static void
-check_user_mem (void *addr, size_t size)
+check_user_mem (struct intr_frame *f, void *addr, size_t size)
 {
   if (size == 0) {
     return;
@@ -55,18 +56,26 @@ check_user_mem (void *addr, size_t size)
   return;
 
 fail:
+
+  if (is_stack_push (f->esp, addr)) {
+    uint32_t *pagedir = thread_current ()->pagedir;
+    if (add_stack_page (pagedir, addr)) {
+      return;
+    }
+  }
+
   thread_exit ();
 }
 
 static void
-check_user_str (const char *str)
+check_user_str (struct intr_frame *f, const char *str)
 {
   // TODO: consider optimizing this function
   if (str == NULL) {
     thread_exit ();
   }
   do {
-    check_user_mem ((void *) str, sizeof(char));
+    check_user_mem (f, (void *) str, sizeof(char));
     str++;
   } while (*str != 0);
 }
@@ -112,7 +121,7 @@ SYSCALL_FUNC(exec)
   CHECK_ARGS(1);
   const char *cmd = *(char **) arg0;
 
-  check_user_str (cmd);
+  check_user_str (f, cmd);
 
   lock_acquire (&syscall_lock);
   f->eax = process_execute (cmd);
@@ -135,7 +144,7 @@ SYSCALL_FUNC(create)
   const char *file = *(char **) arg0;
   unsigned size    = *(unsigned *) arg1;
 
-  check_user_str (file);
+  check_user_str (f, file);
 
   if (strlen (file) > NAME_MAX) {
     f->eax = false;
@@ -154,7 +163,7 @@ SYSCALL_FUNC(remove)
   CHECK_ARGS(1);
   const char *file = *(char **) arg0;
 
-  check_user_str (file);
+  check_user_str (f, file);
 
   if (strlen (file) > NAME_MAX) {
     f->eax = false;
@@ -173,7 +182,7 @@ SYSCALL_FUNC(open)
   CHECK_ARGS(1);
   const char *file = *(char **) arg0;
 
-  check_user_str (file);
+  check_user_str (f, file);
 
   struct fd *fd = calloc (1, sizeof (*fd));
   if (fd == NULL) {
@@ -236,7 +245,7 @@ SYSCALL_FUNC(read)
   void *buf     = *(void **) arg1;
   unsigned size = *(unsigned *) arg2;
 
-  check_user_mem (buf, size);
+  check_user_mem (f, buf, size);
 
   if (size == 0) {
     f->eax = 0;
@@ -264,7 +273,7 @@ SYSCALL_FUNC(write)
   const void *buf = *(void **) arg1;
   unsigned size   = *(unsigned *) arg2;
 
-  check_user_mem ((void *) buf, size);
+  check_user_mem (f, (void *) buf, size);
 
   if (fd == 1 || fd == 2) {
     putbuf (buf, size);
@@ -347,7 +356,7 @@ syscall_handler (struct intr_frame *f)
   void *arg1 = &((void **) f->esp)[2];
   void *arg2 = &((void **) f->esp)[3];
 
-  check_user_mem(call, sizeof (call));
+  check_user_mem(f, call, sizeof (call));
 
   /* look up vector number in table */
   switch (*call) {
