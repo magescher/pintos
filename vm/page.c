@@ -27,8 +27,9 @@ is_stack_push (void *esp, void *addr)
 {
   uint32_t uaddr = (uint32_t) addr;
   uint32_t stack = (uint32_t) esp;
+  
+  if(uaddr <= stack)  { return ((stack - uaddr) <= 32); }
 
-  /* Check to see if it could be a possible stack access */
-  return ((stack - uaddr) <= 32); 
 }
+
 
