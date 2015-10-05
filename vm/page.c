@@ -1,5 +1,9 @@
+#include <stdint.h>
+#include <stdbool.h>
 #include "vm/page.h"
 #include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include "userprog/pagedir.h"
 
 bool
 add_stack_page (uint32_t *pd, void *addr)
@@ -19,13 +23,12 @@ add_stack_page (uint32_t *pd, void *addr)
 }
 
 bool 
-is_stack_push (void *esp, void *addr) {
+is_stack_push (void *esp, void *addr)
+{
+  uint32_t uaddr = (uint32_t) addr;
+  uint32_t stack = (uint32_t) esp;
 
-	uint32_t addr = (uint32_t) addr;
-	uint32_t stack = (uint32_t) esp;
-
-	// Check to see if it could be a possible stack access
-	return((stack - addr) <= 32 ); 
-
+  /* Check to see if it could be a possible stack access */
+  return ((stack - uaddr) <= 32); 
 }
 
