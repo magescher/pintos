@@ -95,7 +95,6 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-#ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct thread *parent;              /* Parent thread. */
@@ -104,7 +103,9 @@ struct thread
     struct semaphore run_sema;          /* Thread is running. */
     struct semaphore exit_sema;         /* Thread is allowed to exit. */
     int rc;                             /* Return code. */
-#endif
+
+    struct hash spage_table;            /* Supplemental page table. */
+    struct lock lock_pd;                /* Page directory lock. */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

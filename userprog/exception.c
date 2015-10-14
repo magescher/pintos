@@ -1,10 +1,17 @@
 #include "userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
+#include <string.h>
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include "userprog/pagedir.h"
+#include "userprog/syscall.h"
+#include "vm/frame.h"
 #include "vm/page.h"
+#include "filesys/file.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -149,13 +156,37 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  if (user) {
-    if (is_stack_push (f->esp, fault_addr)) {
-      uint32_t *pagedir = thread_current ()->pagedir;
-      if (add_stack_page (pagedir, fault_addr)) {
+  struct thread *t = thread_current ();
+  void *uaddr = pg_round_down (fault_addr);
+  void *kpage = NULL;
+  bool success = false;
+
+  if (not_present) {
+    spage_t *sp = spage_get (&t->spage_table, uaddr);
+    if (sp != NULL) {
+      success = spage_load (sp);
+
+      if (success) {
         return;
       }
+    } else if (is_user_vaddr(uaddr) && f->esp - fault_addr <= 32) {
+      /* TODO: make this more falloc-y. */
+      kpage = palloc_get_page (PAL_ZERO | PAL_USER);
+      if (kpage != NULL) {
+        success = pagedir_set_page (t->pagedir, uaddr, kpage, true);
+
+        if (success) {
+          return;
+        } else {
+          palloc_free_page (kpage);
+        }
+      }
     }
+  }
+
+  if (not_present || write || user) {
+    t->rc = -1;
+    thread_exit ();
   }
 
   /* To implement virtual memory, delete the rest of the function
