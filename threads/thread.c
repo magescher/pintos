@@ -12,10 +12,9 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
-#ifdef USERPROG
 #include "userprog/process.h"
 #include "filesys/file.h"
-#endif
+#include "vm/page.h"
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -130,10 +129,8 @@ thread_tick (void)
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
-#ifdef USERPROG
   else if (t->pagedir != NULL)
     user_ticks++;
-#endif
   else
     kernel_ticks++;
 
@@ -230,6 +227,8 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+  lock_init (&t->lock_pd);
+  spage_init (t);
   hash_init (&t->fds, fd_hash, fd_less, t);
   t->parent = thread_current ();
 
@@ -319,9 +318,7 @@ thread_exit (void)
 {
   ASSERT (!intr_context ());
 
-#ifdef USERPROG
   process_exit ();
-#endif
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
@@ -330,6 +327,7 @@ thread_exit (void)
 
   struct thread *t = thread_current ();
   hash_destroy (&t->fds, fd_destroy);
+  spage_free (&t->spage_table);
 
   sema_up (&t->run_sema);
 
@@ -597,10 +595,8 @@ thread_schedule_tail (struct thread *prev)
   /* Start new time slice. */
   thread_ticks = 0;
 
-#ifdef USERPROG
   /* Activate the new address space. */
   process_activate ();
-#endif
 
   /* If the thread we switched from is dying, destroy its struct
      thread.  This must happen late so that thread_exit() doesn't
