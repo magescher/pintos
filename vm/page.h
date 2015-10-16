@@ -35,6 +35,7 @@ typedef struct spage {
 void spage_init (struct thread *);
 void spage_free (struct hash *);
 void spage_create_file (void *, struct file *, off_t, uint32_t, uint32_t, bool);
+void spage_create_swap (void *, size_t);
 bool spage_load (spage_t *);
 bool spage_grow_stack (void *, void *);
 spage_t *spage_get (struct hash *, void *);

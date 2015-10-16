@@ -1,6 +1,8 @@
 #include <inttypes.h>
 #include <string.h>
 #include "vm/page.h"
+#include "vm/frame.h"
+#include "vm/swap.h"
 #include "threads/thread.h"
 #include "threads/palloc.h"
 #include "threads/malloc.h"
@@ -46,7 +48,7 @@ spage_create_file (void *uaddr, struct file *file_ptr, off_t file_off,
                    uint32_t read_bytes, uint32_t zero_bytes, bool writable)
 {
   struct thread *t = thread_current ();
-  spage_t *spage = (spage_t *) calloc (sizeof(spage_t), 1);
+  spage_t *spage = (spage_t *) calloc (1, sizeof(spage_t));
   spage->uaddr = uaddr;
   spage->loaded = false;
   spage->writable = writable;
@@ -59,43 +61,43 @@ spage_create_file (void *uaddr, struct file *file_ptr, off_t file_off,
   hash_insert (&t->spage_table, &spage->hash_elem);
 }
 
+void
+spage_create_swap (void *uaddr, size_t swap_off)
+{
+  struct thread *t = thread_current ();
+  spage_t *spage = (spage_t *) calloc (1, sizeof(spage_t));
+  spage->uaddr = uaddr;
+  spage->swap_off = swap_off;
+  spage->type = SWAP;
+
+  hash_insert (&t->spage_table, &spage->hash_elem);
+}
+
 bool
 spage_load (spage_t *sp)
 {
   struct thread *t = thread_current ();
   enum palloc_flags flags = PAL_USER;
-  void *kpage = NULL;
+  if (sp->file_zero_bytes > 0) {
+    flags |= PAL_ZERO;
+  }
+
+  void *kpage = falloc_get_page (sp->uaddr, flags);
+  if (!pagedir_set_page (t->pagedir, sp->uaddr, kpage, sp->writable)) {
+      falloc_free_page (kpage);
+      return false;
+  }
 
   switch (sp->type) {
   case FILE:
-    /* Get a page of memory. */
-    if (sp->file_zero_bytes > 0) {
-      flags |= PAL_ZERO;
-    }
-    kpage = palloc_get_page (flags);
-
-    /* TODO: this won't fail when we switch to falloc. */
-    ASSERT(kpage != NULL);
-
     /* Load this page. */
     file_seek(sp->file_ptr, sp->file_off);
     off_t bytes = file_read (sp->file_ptr, kpage, sp->file_read_bytes);
-
-    if (bytes != sp->file_read_bytes) {
-        palloc_free_page (kpage);
+    if (bytes != (off_t) sp->file_read_bytes) {
+        falloc_free_page (kpage);
         return false;
     }
-
     memset (kpage + sp->file_read_bytes, 0, sp->file_zero_bytes);
-
-    /* Add the page to the process's address space. */
-    lock_acquire (&t->lock_pd);
-    if (!pagedir_set_page (t->pagedir, sp->uaddr, kpage, sp->writable)) {
-        palloc_free_page (kpage);
-        return false;
-    }
-    lock_release (&t->lock_pd);
-
     sp->loaded = true;
     break;
   case MMAP:
@@ -103,8 +105,8 @@ spage_load (spage_t *sp)
     ASSERT(false);
     break;
   case SWAP:
-    /* TODO: do this. */
-    ASSERT(false);
+    swap_read (sp, kpage);
+    hash_delete (&t->spage_table, &sp->hash_elem);
     break;
   default:
     /* There are no other trusted values for sp->type. */

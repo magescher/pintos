@@ -16,7 +16,4 @@ void *falloc_get_page (void *, enum palloc_flags);
 void *falloc_evict (enum palloc_flags);
 void falloc_free_page (void *);
 
-void falloc_acquire (void);
-void falloc_release (void);
-
 #endif /* vm/frame.h */

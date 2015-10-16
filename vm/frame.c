@@ -5,15 +5,16 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "vm/page.h"
+#include "vm/swap.h"
 
 static struct list frame_table;
-static struct lock falloc_lock;
+static struct lock frame_lock;
 
 void
 falloc_init ()
 {
   list_init (&frame_table);
-  lock_init (&falloc_lock);
+  lock_init (&frame_lock);
 }
 
 static void
@@ -39,6 +40,8 @@ frame_destroy (struct list_elem *e)
 void *
 falloc_get_page (void *upage, enum palloc_flags flags)
 {
+  lock_acquire (&frame_lock);
+
   void *kpage = palloc_get_page (PAL_USER | flags);
 
   if (kpage == NULL) {
@@ -48,13 +51,17 @@ falloc_get_page (void *upage, enum palloc_flags flags)
   ASSERT(kpage != NULL);
   frame_create (upage, kpage);
 
+  lock_release (&frame_lock);
   return kpage;
 }
 
 void *
 falloc_evict (enum palloc_flags flags)
 {
+  lock_acquire (&frame_lock);
+
   struct list_elem *elem, *begin, *end;
+  void *kpage = NULL;
   frame_t *frame;
   spage_t *spage;
   uint32_t *pd;
@@ -76,15 +83,16 @@ falloc_evict (enum palloc_flags flags)
       ASSERT (spage != NULL);
 
       if (pagedir_is_dirty (pd, frame->upage)) {
-        /* write page to swap! */
-        ASSERT(false);
+        size_t swap_off = swap_write (frame->kpage);
+        spage_create_swap (frame->upage, swap_off);
       }
       spage->loaded = false;
 
       pagedir_clear_page (pd, frame->upage);
       frame_destroy (elem);
 
-      return palloc_get_page (PAL_USER | flags);
+      kpage = palloc_get_page (PAL_USER | flags);
+      goto done;
     }
 
     elem = list_next (elem);
@@ -92,16 +100,23 @@ falloc_evict (enum palloc_flags flags)
       elem = begin;
     }
   }
+
+done:
+  lock_release (&frame_lock);
+  return kpage;
 }
 
 void
 falloc_free_page (void *kpage)
 {
+  lock_acquire (&frame_lock);
+
   struct list_elem *elem;
   frame_t *frame;
 
-  if (list_empty (&frame_table))
-    return;
+  if (list_empty (&frame_table)) {
+    goto done;
+  }
 
   for (elem = list_begin (&frame_table);
        elem!= list_end (&frame_table);
@@ -113,17 +128,8 @@ falloc_free_page (void *kpage)
       break;
     }
   }
-}
 
-void
-falloc_acquire ()
-{
-  lock_acquire (&falloc_lock);
-}
-
-void
-falloc_release ()
-{
-  lock_release (&falloc_lock);
+done:
+  lock_release (&frame_lock);
 }
 
