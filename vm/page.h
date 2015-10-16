@@ -23,10 +23,10 @@ typedef struct spage {
 
   struct file *file_ptr;       /* File ptr for file on disk, only valid if type == MMAP. */
   off_t file_off;              /* Offset into the file. */
-  off_t file_read_bytes;       /* Bytes to be read. */
-  off_t file_zero_bytes;       /* Bytes to be zero'd. */
+  size_t file_read_bytes;      /* Bytes to be read. */
+  size_t file_zero_bytes;      /* Bytes to be zero'd. */
 
-  off_t swap_off;              /* Offset into the swap table. */
+  size_t swap_off;             /* Offset into the swap table. */
   bool swap_write;             /* Does the swap slot have write permission. */
 
   struct hash_elem hash_elem;  /* Used for managing the hash table. */
@@ -36,6 +36,7 @@ void spage_init (struct thread *);
 void spage_free (struct hash *);
 void spage_create_file (void *, struct file *, off_t, uint32_t, uint32_t, bool);
 bool spage_load (spage_t *);
+bool spage_grow_stack (void *, void *);
 spage_t *spage_get (struct hash *, void *);
 
 unsigned spage_hash (const struct hash_elem *, void *);

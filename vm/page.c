@@ -115,6 +115,35 @@ spage_load (spage_t *sp)
   return true;
 }
 
+bool
+spage_grow_stack (void *esp, void *addr)
+{
+  if (!is_user_vaddr(addr) || esp - addr > 32) {
+    return false;
+  }
+
+  struct thread *t = thread_current ();
+  void *uaddr = pg_round_down (addr);
+
+  if (pagedir_get_page (t->pagedir, uaddr) != NULL) {
+    return false;
+  }
+
+  void *kpage = palloc_get_page (PAL_ZERO | PAL_USER);
+  if (kpage == NULL) {
+    return false;
+  }
+
+  lock_acquire (&t->lock_pd);
+  bool success = pagedir_set_page (t->pagedir, uaddr, kpage, true);
+  lock_release (&t->lock_pd);
+
+  if (!success) {
+    palloc_free_page (kpage);
+  }
+  return success;
+}
+
 spage_t *
 spage_get (struct hash *t, void *uaddr)
 {
