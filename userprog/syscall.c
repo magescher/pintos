@@ -14,6 +14,7 @@
 #include "filesys/directory.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "vm/page.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -44,10 +45,11 @@ check_user_mem (void *addr, size_t size)
     goto fail;
   }
 
-  uint32_t *pagedir = thread_current ()->pagedir;
+  struct thread *t = thread_current ();
   for (; addr < end; addr += PGSIZE) {
-    void *pg = pagedir_get_page (pagedir, addr);
-    if (pg == NULL) {
+    spage_t *sp = spage_get (&t->spage_table, addr);
+    void *pg = pagedir_get_page (t->pagedir, addr);
+    if (sp == NULL && pg == NULL) {
       goto fail;
     }
   }
