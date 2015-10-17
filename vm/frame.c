@@ -33,35 +33,14 @@ frame_destroy (struct list_elem *e)
   frame_t *frame = list_entry (e, frame_t, list_elem);
 
   list_remove (e);
-  palloc_free_page (frame->upage);
+  palloc_free_page (frame->kpage);
   free (frame);
 }
 
-void *
-falloc_get_page (void *upage, enum palloc_flags flags)
-{
-  lock_acquire (&frame_lock);
-
-  void *kpage = palloc_get_page (PAL_USER | flags);
-
-  if (kpage == NULL) {
-    kpage = falloc_evict (flags);
-  }
-
-  ASSERT(kpage != NULL);
-  frame_create (upage, kpage);
-
-  lock_release (&frame_lock);
-  return kpage;
-}
-
-void *
+static void *
 falloc_evict (enum palloc_flags flags)
 {
-  lock_acquire (&frame_lock);
-
   struct list_elem *elem, *begin, *end;
-  void *kpage = NULL;
   frame_t *frame;
   spage_t *spage;
   uint32_t *pd;
@@ -91,8 +70,7 @@ falloc_evict (enum palloc_flags flags)
       pagedir_clear_page (pd, frame->upage);
       frame_destroy (elem);
 
-      kpage = palloc_get_page (PAL_USER | flags);
-      goto done;
+      return palloc_get_page (PAL_USER | flags);
     }
 
     elem = list_next (elem);
@@ -100,8 +78,22 @@ falloc_evict (enum palloc_flags flags)
       elem = begin;
     }
   }
+}
 
-done:
+void *
+falloc_get_page (void *upage, enum palloc_flags flags)
+{
+  lock_acquire (&frame_lock);
+
+  void *kpage = palloc_get_page (PAL_USER | flags);
+
+  if (kpage == NULL) {
+    kpage = falloc_evict (flags);
+  }
+
+  ASSERT(kpage != NULL);
+  frame_create (upage, kpage);
+
   lock_release (&frame_lock);
   return kpage;
 }

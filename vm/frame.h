@@ -13,7 +13,6 @@ typedef struct frame {
 
 void falloc_init (void);
 void *falloc_get_page (void *, enum palloc_flags);
-void *falloc_evict (enum palloc_flags);
 void falloc_free_page (void *);
 
 #endif /* vm/frame.h */
