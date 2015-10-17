@@ -120,7 +120,7 @@ spage_load (spage_t *sp)
 bool
 spage_grow_stack (void *esp, void *addr)
 {
-  if (!is_user_vaddr(addr) || esp - addr > 32) {
+  if (!is_user_vaddr(addr) || esp - 32 > addr) {
     return false;
   }
 
@@ -131,26 +131,24 @@ spage_grow_stack (void *esp, void *addr)
     return false;
   }
 
-  void *kpage = palloc_get_page (PAL_ZERO | PAL_USER);
-  if (kpage == NULL) {
-    return false;
-  }
+  void *kpage = falloc_get_page (uaddr, PAL_USER | PAL_ZERO);
+  ASSERT(kpage != NULL);
 
   lock_acquire (&t->lock_pd);
   bool success = pagedir_set_page (t->pagedir, uaddr, kpage, true);
   lock_release (&t->lock_pd);
 
   if (!success) {
-    palloc_free_page (kpage);
+    falloc_free_page (kpage);
   }
   return success;
 }
 
 spage_t *
-spage_get (struct hash *t, void *uaddr)
+spage_get (struct hash *t, void *addr)
 {
   spage_t lookup;
-  lookup.uaddr = uaddr;
+  lookup.uaddr = pg_round_down(addr);
   struct hash_elem *e = hash_find (t, &lookup.hash_elem);
   return e ? hash_entry (e, spage_t, hash_elem) : NULL;
 }

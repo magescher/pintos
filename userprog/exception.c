@@ -173,7 +173,6 @@ page_fault (struct intr_frame *f)
   }
 
   if (not_present || write || user) {
-    t->rc = -1;
     thread_exit ();
   }
 
