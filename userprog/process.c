@@ -15,6 +15,7 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/synch.h"
@@ -621,4 +622,120 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+static struct lock mmap_lock;
+
+void
+mmap_init (struct thread *t)
+{
+  lock_init (&mmap_lock);
+  hash_init (&t->map_table, mapping_hash, mapping_less, t);
+}
+
+mapping_t *
+mmap_get (mapid_t mid)
+{
+  lock_acquire (&mmap_lock);
+
+  struct thread *t = thread_current ();
+  mapping_t lookup;
+  lookup.mid = mid;
+  struct hash_elem *e = hash_find (&t->map_table, &lookup.hash_elem);
+
+  lock_release (&mmap_lock);
+  return e ? hash_entry (e, mapping_t, hash_elem) : NULL;
+}
+
+bool
+mmap_is_mapped (mapid_t mid)
+{
+  return mmap_get (mid) != NULL;
+}
+
+mapid_t
+mmap_create (void *addr, struct file *file, size_t size)
+{
+  lock_acquire (&mmap_lock);
+
+  struct thread *t = thread_current ();
+
+  size_t pg_cnt = 0;
+  size_t off, delta, read_bytes, zero_bytes;
+  for (off = 0; off < size; off += PGSIZE) {
+    delta = size - off;
+    read_bytes = (delta < PGSIZE) ? delta : PGSIZE;
+    zero_bytes = PGSIZE - read_bytes;
+    spage_create_file (addr, file, off, read_bytes, zero_bytes, true);
+    pg_cnt++;
+  }
+
+  mapping_t *map = (mapping_t *) calloc (1, sizeof(mapping_t));
+  map->uaddr  = addr;
+  map->pg_cnt = pg_cnt;
+  map->mid    = t->map_allocator++;
+  hash_insert (&t->map_table, &map->hash_elem);
+
+  lock_release (&mmap_lock);
+  return map->mid;
+}
+
+void
+mmap_destroy (mapid_t mid)
+{
+  lock_acquire (&mmap_lock);
+
+  struct thread *t = thread_current ();
+  mapping_t lookup;
+  lookup.mid = mid;
+  struct hash_elem *e = hash_find (&t->map_table, &lookup.hash_elem);
+
+  hash_delete (&t->map_table, e);
+  mapping_destroy (e, NULL);
+
+  lock_release (&mmap_lock);
+}
+
+void
+mmap_free (struct hash *h)
+{
+  lock_acquire (&mmap_lock);
+  hash_destroy (h, mapping_destroy);
+  lock_release (&mmap_lock);
+}
+
+unsigned mapping_hash (const struct hash_elem *p, void *t UNUSED)
+{
+  const mapping_t *e = hash_entry (p, mapping_t, hash_elem);
+  return (unsigned) (e->mid);
+}
+
+void mapping_destroy (struct hash_elem *p, void *u UNUSED)
+{
+  struct thread *t = thread_current ();
+  uint32_t *pd = t->pagedir;
+  const mapping_t *e = hash_entry (p, mapping_t, hash_elem);
+
+  size_t pg;
+  struct file *file = NULL;
+  for (pg = 0; pg < e->pg_cnt; pg++) {
+    void *uaddr = e->uaddr + pg * PGSIZE;
+    void *kpage = pagedir_get_page (pd, uaddr);
+    spage_t *sp = spage_get (&t->spage_table, uaddr);
+    if (kpage != NULL && pagedir_is_dirty (pd, uaddr)) {
+      file_seek (sp->file_ptr, sp->file_off);
+      file_write (sp->file_ptr, kpage, sp->file_read_bytes);
+    }
+    file = sp->file_ptr;
+    hash_delete (&t->spage_table, &sp->hash_elem);
+  }
+  file_close (file);
+  free ((void *) e);
+}
+
+bool mapping_less (const struct hash_elem *a, const struct hash_elem *b, void *t UNUSED)
+{
+  mapping_t *x = hash_entry (a, mapping_t, hash_elem);
+  mapping_t *y = hash_entry (b, mapping_t, hash_elem);
+  return (x->mid < y->mid);
 }

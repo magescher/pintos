@@ -229,6 +229,7 @@ thread_create (const char *name, int priority,
 
   lock_init (&t->lock_pd);
   spage_init (t);
+  mmap_init (t);
   hash_init (&t->fds, fd_hash, fd_less, t);
   t->parent = thread_current ();
 
@@ -328,6 +329,7 @@ thread_exit (void)
   struct thread *t = thread_current ();
   hash_destroy (&t->fds, fd_destroy);
   spage_free (&t->spage_table);
+  mmap_free (&t->map_table);
 
   sema_up (&t->run_sema);
 

@@ -3,6 +3,7 @@
 #include <syscall-nr.h>
 #include <string.h>
 #include <hash.h>
+#include <user/syscall.h>
 #include "userprog/process.h"
 #include "userprog/pagedir.h"
 #include "threads/interrupt.h"
@@ -338,6 +339,68 @@ SYSCALL_FUNC(close)
   }
 }
 
+static void
+SYSCALL_FUNC(mmap)
+{
+  CHECK_ARGS(2);
+  int fd     = *(int *) arg0;
+  void *addr = *(void **) arg1;
+
+  if (fd == 0 || fd == 1 || addr == 0 ||
+      pg_ofs (addr) != 0 || !is_user_vaddr (addr)) {
+    goto fail;
+  }
+
+  struct fd *file = fd_lookup (fd);
+  if (file == NULL) {
+    goto fail;
+  }
+
+  lock_acquire (&syscall_lock);
+  size_t bytes = file_length (file->file);
+  lock_release (&syscall_lock);
+
+  if (bytes == 0) {
+    goto fail;
+  }
+
+  struct thread *t = thread_current ();
+  uint32_t *pd = t->pagedir;
+  struct hash *sp = &t->spage_table;
+
+  size_t off;
+  for (off = 0; off < bytes; off += PGSIZE) {
+    if (!is_user_vaddr (addr + off)
+        || pagedir_get_page (pd, addr + off)
+        || spage_get (sp, addr + off)) {
+      goto fail;
+    }
+  }
+
+  lock_acquire (&syscall_lock);
+  struct file *re_file = file_reopen (file->file);
+  lock_release (&syscall_lock);
+
+  if (re_file == NULL) {
+    goto fail;
+  }
+
+  f->eax = mmap_create (addr, re_file, bytes);
+  return;
+
+fail:
+  f->eax = -1;
+}
+
+static void
+SYSCALL_FUNC(munmap)
+{
+  CHECK_ARGS(1);
+  mapid_t mapping = *(mapid_t *) arg0;
+
+  mmap_destroy (mapping);
+}
+
 /* used to generate switch statement code */
 #define SYSCALL_CALL(name)                       \
   syscall_handler_ ## name (arg0, arg1, arg2, f); \
@@ -368,6 +431,8 @@ syscall_handler (struct intr_frame *f)
   case SYS_SEEK:     SYSCALL_CALL(seek);
   case SYS_TELL:     SYSCALL_CALL(tell);
   case SYS_CLOSE:    SYSCALL_CALL(close);
+  case SYS_MMAP:     SYSCALL_CALL(mmap);
+  case SYS_MUNMAP:   SYSCALL_CALL(munmap);
   }
 }
 
