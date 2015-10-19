@@ -106,6 +106,8 @@ struct thread
 
     struct hash spage_table;            /* Supplemental page table. */
     struct lock lock_pd;                /* Page directory lock. */
+    struct hash map_table;
+    size_t map_allocator;
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
