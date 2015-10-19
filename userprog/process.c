@@ -218,6 +218,10 @@ process_exit (void)
   /* Allow file to be written again. */
   file_close (cur->file);
 
+  /* Clean up vm tables. */
+  mmap_free (&cur->map_table);
+  spage_free (&cur->spage_table);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -666,7 +670,7 @@ mmap_create (void *addr, struct file *file, size_t size)
     delta = size - off;
     read_bytes = (delta < PGSIZE) ? delta : PGSIZE;
     zero_bytes = PGSIZE - read_bytes;
-    spage_create_file (addr, file, off, read_bytes, zero_bytes, true);
+    spage_create_file (addr + off, file, off, read_bytes, zero_bytes, true);
     pg_cnt++;
   }
 

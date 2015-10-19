@@ -328,8 +328,6 @@ thread_exit (void)
 
   struct thread *t = thread_current ();
   hash_destroy (&t->fds, fd_destroy);
-  spage_free (&t->spage_table);
-  mmap_free (&t->map_table);
 
   sema_up (&t->run_sema);
 
