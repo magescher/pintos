@@ -4,6 +4,7 @@
 #include "threads/palloc.h"
 #include "threads/malloc.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 #include "vm/page.h"
 #include "vm/swap.h"
 
@@ -54,6 +55,7 @@ falloc_evict (enum palloc_flags flags)
     frame = list_entry (elem, frame_t, list_elem);
     pd = frame->thread->pagedir;
 
+    ASSERT (is_user_vaddr (frame->upage));
     if (pagedir_is_accessed (pd, frame->upage)) {
       /* set A bit to 0 on first sweep. */
       pagedir_set_accessed (pd, frame->upage, false);
@@ -62,15 +64,18 @@ falloc_evict (enum palloc_flags flags)
       ASSERT (spage != NULL);
 
       if (pagedir_is_dirty (pd, frame->upage)) {
-        size_t swap_off = swap_write (frame->kpage);
-        spage_create_swap (frame->upage, swap_off);
+        spage->uaddr = frame->upage;
+        spage->swap_off = swap_write (frame->kpage);
+        spage->type = SWAP;
       }
       spage->loaded = false;
 
       pagedir_clear_page (pd, frame->upage);
       frame_destroy (elem);
 
-      return palloc_get_page (PAL_USER | flags);
+      void *kpage = palloc_get_page (PAL_USER | flags);
+      ASSERT (kpage != NULL);
+      return kpage;
     }
 
     elem = list_next (elem);

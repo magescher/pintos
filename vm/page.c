@@ -114,10 +114,17 @@ spage_load (spage_t *sp)
   return true;
 }
 
+/* Set maximum stack to 8MB. */
+#define STACK_SIZE (8 * 1024 * 1024)
+
 bool
 spage_grow_stack (void *esp, void *addr)
 {
   if (!is_user_vaddr(addr) || esp - 32 > addr) {
+    return false;
+  }
+
+  if (esp >= PHYS_BASE - STACK_SIZE) {
     return false;
   }
 
