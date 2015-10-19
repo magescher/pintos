@@ -7,19 +7,15 @@
 #include "threads/thread.h"
 
 typedef enum spage_type {
-  /* TODO: come up with types */
   FILE,
-  MMAP,
   SWAP
 } spage_type_t;
 
 typedef struct spage {
   void *uaddr;                 /* User address ptr. */
-  spage_type_t type;           /* TODO: Type of page, can be: swap, or mmap'd. */
+  spage_type_t type;           /* Type of page: either file (lazy load / mmap) or swap. */
   bool loaded;                 /* Allows for lazy loading. */
   bool writable;               /* Is page writable. */
-  bool dirty;                  /* Has the page been modified? */
-                               /* TODO: what other addr info do we need? */
 
   struct file *file_ptr;       /* File ptr for file on disk, only valid if type == MMAP. */
   off_t file_off;              /* Offset into the file. */

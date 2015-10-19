@@ -90,7 +90,7 @@ spage_load (spage_t *sp)
 
   switch (sp->type) {
   case FILE:
-    /* Load this page. */
+    /* Load a page directly from a file. */
     file_seek(sp->file_ptr, sp->file_off);
     off_t bytes = file_read (sp->file_ptr, kpage, sp->file_read_bytes);
     if (bytes != (off_t) sp->file_read_bytes) {
@@ -100,11 +100,8 @@ spage_load (spage_t *sp)
     memset (kpage + sp->file_read_bytes, 0, sp->file_zero_bytes);
     sp->loaded = true;
     break;
-  case MMAP:
-    /* TODO: do this. */
-    ASSERT(false);
-    break;
   case SWAP:
+    /* Load a page from swap. */
     swap_read (sp, kpage);
     hash_delete (&t->spage_table, &sp->hash_elem);
     break;

@@ -13,11 +13,11 @@ void process_exit (void);
 void process_activate (void);
 
 typedef struct mapping {
-  void *uaddr;
-  size_t pg_cnt;
-  mapid_t mid;
+  void *uaddr;                 /* User virtual address. */
+  size_t pg_cnt;               /* Number of pages stored. */
+  mapid_t mid;                 /* Used for identified. */
 
-  struct hash_elem hash_elem;
+  struct hash_elem hash_elem;  /* Used for managing the hash table. */
 } mapping_t;
 
 void mmap_init (struct thread *);
