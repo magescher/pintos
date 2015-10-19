@@ -124,9 +124,11 @@ spage_grow_stack (void *esp, void *addr)
     return false;
   }
 
-  if (esp >= PHYS_BASE - STACK_SIZE) {
-    return false;
-  }
+  /* TODO: why is this failing?
+   *   if (esp >= PHYS_BASE - STACK_SIZE) {
+   *     return false;
+   *   }
+   */
 
   struct thread *t = thread_current ();
   void *uaddr = pg_round_down (addr);
