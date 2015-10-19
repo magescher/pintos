@@ -64,11 +64,7 @@ void swap_read (spage_t *sp, void *kpage)
 
 void swap_destroy (off_t swap_off)
 {
-  lock_acquire (&swap_lock);
-
   ASSERT (bitmap_test (swap_map, swap_off));
   bitmap_set (swap_map, swap_off, false);
-
-  lock_release (&swap_lock);
 }
 
