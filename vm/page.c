@@ -20,6 +20,8 @@ void
 spage_destroy (struct hash_elem *p, void *t UNUSED)
 {
   const spage_t *e = hash_entry (p, spage_t, hash_elem);
+  void *kpage = pagedir_get_page (thread_current ()->pagedir, e->uaddr);
+  falloc_free_page (kpage);
   free ((void *) e);
 }
 
@@ -103,7 +105,8 @@ spage_load (spage_t *sp)
   case SWAP:
     /* Load a page from swap. */
     swap_read (sp, kpage);
-    hash_delete (&t->spage_table, &sp->hash_elem);
+    sp->type = FILE;
+    sp->loaded = true;
     break;
   default:
     /* There are no other trusted values for sp->type. */

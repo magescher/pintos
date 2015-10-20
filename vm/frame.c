@@ -34,6 +34,7 @@ frame_destroy (struct list_elem *e)
   frame_t *frame = list_entry (e, frame_t, list_elem);
 
   list_remove (e);
+  pagedir_clear_page (frame->thread->pagedir, frame->upage);
   palloc_free_page (frame->kpage);
   free (frame);
 }
@@ -70,7 +71,6 @@ falloc_evict (enum palloc_flags flags)
       }
       spage->loaded = false;
 
-      pagedir_clear_page (pd, frame->upage);
       frame_destroy (elem);
 
       void *kpage = palloc_get_page (PAL_USER | flags);
