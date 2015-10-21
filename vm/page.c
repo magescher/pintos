@@ -104,7 +104,7 @@ spage_load (spage_t *sp)
     break;
   case SWAP:
     /* Load a page from swap. */
-    swap_read (sp, kpage);
+    swap_read (sp, sp->uaddr);
     sp->type = FILE;
     sp->loaded = true;
     break;
