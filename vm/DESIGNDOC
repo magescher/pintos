@@ -143,21 +143,29 @@ If it was within the accepted range of stack accesses, we determine it to be a s
 >> textbook for an explanation of the necessary conditions for
 >> deadlock.)
 
+We always lock accesses to data structures, but are sure to never call locking code from a function that locks.
+
 >> B6: A page fault in process P can cause another process Q's frame
 >> to be evicted.  How do you ensure that Q cannot access or modify
 >> the page during the eviction process?  How do you avoid a race
 >> between P evicting Q's frame and Q faulting the page back in?
+
+Again, these functions are locked, but only lock once at entrance to prevent race conditions.
 
 >> B7: Suppose a page fault in process P causes a page to be read from
 >> the file system or swap.  How do you ensure that a second process Q
 >> cannot interfere by e.g. attempting to evict the frame while it is
 >> still being read in?
 
+File system operations are all locked with a global lock. Frame operations are the same.
+
 >> B8: Explain how you handle access to paged-out pages that occur
 >> during system calls.  Do you use page faults to bring in pages (as
 >> in user programs), or do you have a mechanism for "locking" frames
 >> into physical memory, or do you use some other design?  How do you
 >> gracefully handle attempted accesses to invalid virtual addresses?
+
+We simply page fault from the system call and bring the page in to memory in the page fault handler.
 
 ---- RATIONALE ----
 
@@ -168,6 +176,8 @@ If it was within the accepted range of stack accesses, we determine it to be a s
 >> where your design falls along this continuum and why you chose to
 >> design it this way.
 
+We are somewhere in the middle. Each component has a lock, which allows granularity, without the stress of complexity.
+
 			 MEMORY MAPPED FILES
 			 ===================
 
@@ -177,14 +187,67 @@ If it was within the accepted range of stack accesses, we determine it to be a s
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+typedef struct spage {
+  void *uaddr;                 /* User address ptr. */
+  spage_type_t type;           /* Type of page: either file (lazy load / mmap) or swap. */
+  bool loaded;                 /* Allows for lazy loading. */
+  bool writable;               /* Is page writable. */
+
+  struct file *file_ptr;       /* File ptr for file on disk, only valid if type == MMAP. */
+  off_t file_off;              /* Offset into the file. */
+  size_t file_read_bytes;      /* Bytes to be read. */
+  size_t file_zero_bytes;      /* Bytes to be zero'd. */
+
+  size_t swap_off;             /* Offset into the swap table. */
+  bool swap_write;             /* Does the swap slot have write permission. */
+
+  struct hash_elem hash_elem;  /* Used for managing the hash table. */
+} spage_t;
+
+struct thread
+  {
+    /* Owned by thread.c. */
+    tid_t tid;                          /* Thread identifier. */
+    enum thread_status status;          /* Thread state. */
+    char name[16];                      /* Name (for debugging purposes). */
+    uint8_t *stack;                     /* Saved stack pointer. */
+    int priority;                       /* Priority. */
+    struct list_elem allelem;           /* List element for all threads list. */
+
+    /* Shared between thread.c and synch.c. */
+    struct list_elem elem;              /* List element. */
+
+    /* Owned by userprog/process.c. */
+    uint32_t *pagedir;                  /* Page directory. */
+    struct thread *parent;              /* Parent thread. */
+    struct file *file;                  /* File ptr to executable. */
+    struct hash fds;                    /* File descriptor table. */
+    struct semaphore run_sema;          /* Thread is running. */
+    struct semaphore exit_sema;         /* Thread is allowed to exit. */
+    int rc;                             /* Return code. */
+
+    struct hash spage_table;            /* Supplemental page table. */
+    struct lock lock_pd;                /* Page directory lock. */
+    struct hash map_table;
+    size_t map_allocator;
+
+    /* Owned by thread.c. */
+    unsigned magic;                     /* Detects stack overflow. */
+  };
+
+
 ---- ALGORITHMS ----
 
 >> C2: Describe how memory mapped files integrate into your virtual
 >> memory subsystem.  Explain how the page fault and eviction
 >> processes differ between swap pages and other pages.
 
+We treat mmap'd files similar to other sup. table entries. We also store the mapping id in a mapping table inside the thread struct.
+
 >> C3: Explain how you determine whether a new file mapping overlaps
 >> any existing segment.
+
+We just check all pages of the file to see if there is an existing mapping or pagedir entry. This section was quite easy to implement as the Stanford docs are very detailed for each failure case.
 
 ---- RATIONALE ----
 
@@ -194,6 +257,8 @@ If it was within the accepted range of stack accesses, we determine it to be a s
 >> that much of their implementation can be shared.  Explain why your
 >> implementation either does or does not share much of the code for
 >> the two situations.
+
+We choose to share some structures, but opted to treat them separately as they were implemented at different times.
 
 			   SURVEY QUESTIONS
 			   ================
