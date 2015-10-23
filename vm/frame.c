@@ -62,13 +62,15 @@ falloc_evict (enum palloc_flags flags)
       pagedir_set_accessed (pd, frame->upage, false);
     } else {
       spage = spage_get (&frame->thread->spage_table, frame->upage);
-      ASSERT (spage != NULL);
-
+      if (spage == NULL) {
+        spage = (spage_t *) calloc (1, sizeof(spage_t));
+        hash_insert (&frame->thread->spage_table, &spage->hash_elem);
+      }
       if (pagedir_is_dirty (pd, frame->upage)) {
-        spage->uaddr = frame->upage;
         spage->swap_off = swap_write (frame->kpage);
         spage->type = SWAP;
       }
+      spage->uaddr = frame->upage;
       spage->loaded = false;
 
       frame_destroy (elem);
@@ -83,6 +85,8 @@ falloc_evict (enum palloc_flags flags)
       elem = begin;
     }
   }
+
+  ASSERT (false);
 }
 
 void *

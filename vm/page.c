@@ -75,6 +75,18 @@ spage_create_swap (void *uaddr, size_t swap_off)
   hash_insert (&t->spage_table, &spage->hash_elem);
 }
 
+void
+spage_create_page (void *uaddr)
+{
+  struct thread *t = thread_current ();
+  spage_t *spage = (spage_t *) calloc (1, sizeof(spage_t));
+  spage->uaddr = uaddr;
+  spage->loaded = true;
+  spage->type = SWAP;
+
+  hash_insert (&t->spage_table, &spage->hash_elem);
+}
+
 bool
 spage_load (spage_t *sp)
 {
@@ -140,6 +152,7 @@ spage_grow_stack (void *esp, void *addr)
     return false;
   }
 
+  spage_create_page (uaddr);
   void *kpage = falloc_get_page (uaddr, PAL_USER | PAL_ZERO);
   ASSERT(kpage != NULL);
 

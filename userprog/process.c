@@ -22,6 +22,7 @@
 
 #include "devices/timer.h"
 #include "vm/page.h"
+#include "vm/frame.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -731,7 +732,8 @@ void mapping_destroy (struct hash_elem *p, void *u UNUSED)
       file_write (sp->file_ptr, kpage, sp->file_read_bytes);
     }
     file = sp->file_ptr;
-    hash_delete (&t->spage_table, &sp->hash_elem);
+    falloc_free_page (kpage);
+    sp->loaded = false;
   }
   file_close (file);
   free ((void *) e);
