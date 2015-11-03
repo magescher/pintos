@@ -81,11 +81,11 @@ thread_priority_party(struct list *threads)
   old_level = intr_disable ();
 
   e = list_begin (threads);
-  highest = list_entry (e, struct thread, allelem);
+  highest = list_entry (e, struct thread, elem);
   for (e = list_begin (threads); e != list_end (threads);
        e = list_next (e))
     {
-      struct thread *t = list_entry (e, struct thread, allelem);
+      struct thread *t = list_entry (e, struct thread, elem);
       if (t->priority > highest->priority) {
         highest = t;
       }
@@ -545,10 +545,14 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list))
+  if (list_empty (&ready_list)) {
     return idle_thread;
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  } else {
+    // TODO: consider using insert_sorted
+    struct thread *t = thread_priority_party (&ready_list);
+    list_remove (&t->elem);
+    return t;
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -608,7 +612,7 @@ static void
 schedule (void) 
 {
   struct thread *cur = running_thread ();
-  struct thread *next = thread_priority_party (&ready_list);
+  struct thread *next = next_thread_to_run();
   struct thread *prev = NULL;
 
   ASSERT (intr_get_level () == INTR_OFF);
