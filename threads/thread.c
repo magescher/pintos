@@ -71,6 +71,30 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+struct thread *
+thread_priority_party(struct list *threads)
+{
+  struct list_elem *e;
+  struct thread *highest;
+  enum intr_level old_level;
+
+  old_level = intr_disable ();
+
+  e = list_begin (threads);
+  highest = list_entry (e, struct thread, allelem);
+  for (e = list_begin (threads); e != list_end (threads);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, allelem);
+      if (t->priority > highest->priority) {
+        highest = t;
+      }
+    }
+
+  intr_set_level (old_level);
+  return highest;
+}
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -344,6 +368,7 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  schedule ();
 }
 
 /* Returns the current thread's priority. */
@@ -556,7 +581,7 @@ static void
 schedule (void) 
 {
   struct thread *cur = running_thread ();
-  struct thread *next = next_thread_to_run ();
+  struct thread *next = thread_priority_party (&ready_list);
   struct thread *prev = NULL;
 
   ASSERT (intr_get_level () == INTR_OFF);
