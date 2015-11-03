@@ -95,6 +95,30 @@ thread_priority_party(struct list *threads)
   return highest;
 }
 
+void
+thread_donate (struct thread *t)
+{
+  struct thread *cur = thread_current ();
+  int old_priority = t->priority;
+  if (old_priority < cur->priority) {
+    t->priority = cur->priority;
+    cur->priority = old_priority;
+    cur->donation = true;
+  }
+}
+
+void
+thread_donret (struct thread *t)
+{
+  struct thread *cur = thread_current ();
+  int old_priority = t->priority;
+  if (cur->donation) {
+    t->priority = cur->priority;
+    cur->priority = old_priority;
+    cur->donation = false;
+  }
+}
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -368,7 +392,10 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
-  schedule ();
+  struct thread *t = thread_priority_party (&ready_list);
+  if (t->priority > new_priority) {
+    thread_yield ();
+  }
 }
 
 /* Returns the current thread's priority. */
