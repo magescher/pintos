@@ -97,6 +97,7 @@ struct thread
 
     struct thread *donee;
     struct list donor_list;
+    struct list_elem donorelem;
     int base_prio;
 
 #ifdef USERPROG

@@ -176,7 +176,7 @@ lock_donate (struct thread *t1, struct thread *t2, int depth)
   if (t1->priority > t2->priority) {
     t1->donee = t2;
     t2->priority = t1->priority;
-    list_push_front (&t2->donor_list, &t1->allelem);
+    list_push_front (&t2->donor_list, &t1->donorelem);
 
     if (t2->donee != NULL) {
       lock_donate (t2, t2->donee, depth + 1);
