@@ -160,6 +160,28 @@ sema_test_helper (void *sema_)
       sema_up (&sema[1]);
     }
 }
+
+#define MAX_DONATION_DEPTH 8
+
+void
+lock_donate (struct thread *t1, struct thread *t2, int depth)
+{
+  return;
+
+  if (depth > MAX_DONATION_DEPTH) {
+    return;
+  }
+
+  if (t1->priority >= t2->priority) {
+    t1->donee = t2;
+    t1->donation = t2->priority;
+    t2->priority = t1->priority;
+  }
+  if (t2->donee != NULL) {
+    lock_donate (t1, t2->donee, depth + 1);
+  }
+}
+
 
 /* Initializes LOCK.  A lock can be held by at most a single
    thread at any given time.  Our locks are not "recursive", that
@@ -202,14 +224,6 @@ lock_acquire (struct lock *lock)
 
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
-
-  /* TODO: disabled for now, re-enable in the future
-  while (!lock_try_acquire(lock)) {
-    thread_donate (lock->holder);
-    sema_down (&lock->semaphore);
-    thread_donret (lock->holder);
-  }
-  */
 }
 
 /* Tries to acquires LOCK and returns true if successful or false

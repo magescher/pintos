@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -19,6 +20,10 @@
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
+
+/* List of processes in THREAD_BLOCKED state, that is, processes
+   that are waiting for a wakeup call. */
+static struct list waiting_list;
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
@@ -87,31 +92,11 @@ thread_less_prio (const struct list_elem *a,
   return thread_entry (a)->priority > thread_entry (b)->priority;
 }
 
-
-void
-thread_donate (struct thread *t)
+bool thread_less_wakeup (const struct list_elem *a,
+                         const struct list_elem *b,
+                         void *aux UNUSED)
 {
-  // TODO: implementation
-  struct thread *cur = thread_current ();
-  int old_priority = t->priority;
-  if (old_priority < cur->priority) {
-    t->priority = cur->priority;
-    cur->priority = old_priority;
-    cur->donation = true;
-  }
-}
-
-void
-thread_donret (struct thread *t)
-{
-  // TODO: implementation
-  struct thread *cur = thread_current ();
-  int old_priority = t->priority;
-  if (cur->donation) {
-    t->priority = cur->priority;
-    cur->priority = old_priority;
-    cur->donation = false;
-  }
+  return thread_entry (a)->wakeup < thread_entry (b)->wakeup;
 }
 
 /* Initializes the threading system by transforming the code
@@ -133,6 +118,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
+  list_init (&waiting_list);
   list_init (&ready_list);
   list_init (&all_list);
 
@@ -257,6 +243,40 @@ thread_create (const char *name, int priority,
   }
 
   return tid;
+}
+
+void
+thread_sleep (int64_t wakeup)
+{
+  enum intr_level old_level;
+  old_level = intr_disable ();
+
+  struct thread *t = thread_current ();
+  t->wakeup = timer_ticks() + wakeup;
+  list_insert_ordered (&waiting_list, &t->elem, thread_less_wakeup, NULL);
+
+  thread_block ();
+  intr_set_level (old_level);
+}
+
+void
+thread_wakeup ()
+{
+  enum intr_level old_level;
+  old_level = intr_disable ();
+
+  while (!list_empty (&waiting_list)) {
+    struct thread *t = thread_entry (list_begin (&waiting_list));
+    if (t->wakeup > timer_ticks ()) {
+      break;
+    }
+
+    t->wakeup = 0;
+    list_pop_front (&waiting_list);
+    thread_unblock (t);
+  }
+
+  intr_set_level (old_level);
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -606,6 +626,7 @@ thread_schedule_tail (struct thread *prev)
 static void
 schedule (void) 
 {
+  thread_wakeup ();
   struct thread *cur = running_thread ();
   struct thread *next = next_thread_to_run();
   struct thread *prev = NULL;

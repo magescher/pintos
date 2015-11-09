@@ -93,7 +93,10 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-    bool donation;
+    int64_t wakeup;                     /* When to wake thread. */
+
+    struct thread *donee;
+    int donation;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -111,9 +114,10 @@ extern bool thread_mlfqs;
 
 struct thread *thread_entry (const struct list_elem *e);
 bool thread_less_prio (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
-struct thread *thread_priority_party (struct list *);
-void thread_donate (struct thread *);
-void thread_donret (struct thread *);
+bool thread_less_wakeup (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+
+void thread_sleep (int64_t wakeup);
+void thread_wakeup (void);
 
 void thread_init (void);
 void thread_start (void);
