@@ -163,9 +163,12 @@ sema_test_helper (void *sema_)
 
 #define MAX_DONATION_DEPTH 8
 
-void
+static void
 lock_donate (struct thread *t1, struct thread *t2, int depth)
 {
+  if (t2 == NULL || t1 == t2) {
+    return;
+  }
   if (depth > MAX_DONATION_DEPTH) {
     return;
   }
@@ -220,7 +223,9 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
+  struct thread *cur = thread_current ();
 
+  lock_donate (cur, lock->holder, 0);
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 }
@@ -255,8 +260,10 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
+  struct thread *cur = thread_current ();
 
   lock->holder = NULL;
+  cur->priority = cur->base_prio;
   sema_up (&lock->semaphore);
 }
 
