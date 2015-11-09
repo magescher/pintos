@@ -542,6 +542,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->base_prio = priority;
   t->magic = THREAD_MAGIC;
+  list_init (&t->donor_list);
   list_push_back (&all_list, &t->allelem);
 }
 
@@ -566,6 +567,7 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
+  list_sort (&ready_list, thread_less_prio, NULL);
   if (list_empty (&ready_list))
     return idle_thread;
   else

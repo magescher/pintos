@@ -176,6 +176,7 @@ lock_donate (struct thread *t1, struct thread *t2, int depth)
   if (t1->priority > t2->priority) {
     t1->donee = t2;
     t2->priority = t1->priority;
+    list_push_front (&t2->donor_list, &t1->allelem);
 
     if (t2->donee != NULL) {
       lock_donate (t2, t2->donee, depth + 1);
@@ -260,7 +261,15 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  lock->holder->priority = lock->holder->base_prio;
+  struct thread *t = lock->holder;
+  t->priority = t->base_prio;
+  if (!list_empty (&t->donor_list)) {
+    list_pop_front (&t->donor_list);
+    if (!list_empty (&t->donor_list)) {
+      struct thread *d = thread_entry (list_begin (&t->donor_list));
+      t->priority = d->priority;
+    }
+  }
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
