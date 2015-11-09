@@ -166,19 +166,18 @@ sema_test_helper (void *sema_)
 void
 lock_donate (struct thread *t1, struct thread *t2, int depth)
 {
-  return;
-
   if (depth > MAX_DONATION_DEPTH) {
     return;
   }
 
-  if (t1->priority >= t2->priority) {
+  if (t1->priority > t2->priority) {
     t1->donee = t2;
-    t1->donation = t2->priority;
     t2->priority = t1->priority;
-  }
-  if (t2->donee != NULL) {
-    lock_donate (t1, t2->donee, depth + 1);
+    t1->priority = -1;
+
+    if (t2->donee != NULL) {
+      lock_donate (t2, t2->donee, depth + 1);
+    }
   }
 }
 

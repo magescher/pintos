@@ -96,7 +96,7 @@ struct thread
     int64_t wakeup;                     /* When to wake thread. */
 
     struct thread *donee;
-    int donation;
+    int base_prio;
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
