@@ -96,7 +96,6 @@ struct thread
     int64_t wakeup;                     /* When to wake thread. */
 
     struct thread *donee;
-    struct list donor_list;
     struct list_elem donorelem;
     int base_prio;
 

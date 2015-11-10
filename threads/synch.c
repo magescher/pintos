@@ -31,6 +31,7 @@
 #include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -164,7 +165,7 @@ sema_test_helper (void *sema_)
 #define MAX_DONATION_DEPTH 8
 
 static void
-lock_donate (struct thread *t1, struct thread *t2, int depth)
+lock_donate (struct lock *lock, struct thread *t1, struct thread *t2, int depth)
 {
   if (t2 == NULL || t1 == t2) {
     return;
@@ -175,11 +176,14 @@ lock_donate (struct thread *t1, struct thread *t2, int depth)
 
   if (t1->priority > t2->priority) {
     t1->donee = t2;
-    t2->priority = t1->priority;
-    list_push_front (&t2->donor_list, &t1->donorelem);
 
+    priority_t *p = (priority_t *) malloc (sizeof(priority_t));
+    p->v = t2->priority;
+    list_push_back (&lock->donor_list, &p->elem);
+
+    t2->priority = t1->priority;
     if (t2->donee != NULL) {
-      lock_donate (t2, t2->donee, depth + 1);
+      lock_donate (lock, t2, t2->donee, depth + 1);
     }
   }
 }
@@ -207,6 +211,7 @@ lock_init (struct lock *lock)
 
   lock->holder = NULL;
   sema_init (&lock->semaphore, 1);
+  list_init (&lock->donor_list);
 }
 
 /* Acquires LOCK, sleeping until it becomes available if
@@ -225,7 +230,7 @@ lock_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
   struct thread *cur = thread_current ();
 
-  lock_donate (cur, lock->holder, 0);
+  lock_donate (lock, cur, lock->holder, 0);
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
 }
@@ -262,13 +267,10 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   struct thread *t = lock->holder;
-  t->priority = t->base_prio;
-  if (!list_empty (&t->donor_list)) {
-    list_pop_front (&t->donor_list);
-    if (!list_empty (&t->donor_list)) {
-      struct thread *d = thread_entry (list_begin (&t->donor_list));
-      t->priority = d->priority;
-    }
+  if (!list_empty (&lock->donor_list)) {
+    struct list_elem *e = list_pop_front (&lock->donor_list);
+    priority_t *p = list_entry (e, priority_t, elem);
+    t->priority = p->v;
   }
   lock->holder = NULL;
   sema_up (&lock->semaphore);
