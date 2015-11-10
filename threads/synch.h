@@ -23,13 +23,16 @@ typedef struct priority
     struct list_elem elem;
   } priority_t;
 
+#define LOCK_MAGIC 0x4f6011e6
+
 /* Lock. */
 struct lock 
   {
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
 
-    struct list donor_list;
+    struct list_elem elem;
+    int priority;
   };
 
 void lock_init (struct lock *);

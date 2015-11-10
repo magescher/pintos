@@ -95,8 +95,9 @@ struct thread
 
     int64_t wakeup;                     /* When to wake thread. */
 
-    struct thread *donee;
-    struct list_elem donorelem;
+    struct list donor_list;
+    struct list_elem donor_elem;
+    struct lock *lock;
     int base_prio;
 
 #ifdef USERPROG
