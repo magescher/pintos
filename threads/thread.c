@@ -413,8 +413,11 @@ thread_set_priority (int new_priority)
   ASSERT (new_priority >= PRI_MIN);
   ASSERT (new_priority <= PRI_MAX);
 
-  thread_current ()->priority = new_priority;
-  thread_current ()->base_prio = new_priority;
+  struct thread *t = thread_current ();
+  if (t->priority == t->base_prio) {
+    t->priority = new_priority;
+  }
+  t->base_prio = new_priority;
   thread_yield ();
 }
 

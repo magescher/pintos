@@ -53,8 +53,6 @@ lock_donate ()
     if (t1->priority <= t2->priority) {
       break;
     }
-    // printf ("donation from %s:%d (%d) to %s:%d (%d)", t1->name,
-    //   t1->status, t1->priority, t2->name, t2->status, t2->priority);
     t2->priority = t1->priority;
     t1 = lock->holder;
     lock = t1->lock;
