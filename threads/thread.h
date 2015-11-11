@@ -100,6 +100,9 @@ struct thread
     struct lock *lock;
     int base_prio;
 
+    int nice;
+    int recent_cpu;
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -113,6 +116,7 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+extern struct thread *idle_thread;
 
 struct thread *thread_entry (const struct list_elem *e);
 bool thread_less_prio (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
@@ -120,6 +124,12 @@ bool thread_less_wakeup (const struct list_elem *a, const struct list_elem *b, v
 
 void thread_sleep (int64_t wakeup);
 void thread_wakeup (void);
+
+bool mlfqs_should_yield (void);
+void mlfqs_priority (struct thread *t, void *aux UNUSED);
+void mlfqs_recent_cpu (struct thread *t, void *aux UNUSED);
+void mlfqs_load_avg (void);
+void thread_update_priority (struct thread *t, int priority);
 
 void thread_init (void);
 void thread_start (void);
