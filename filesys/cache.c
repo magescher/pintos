@@ -30,11 +30,12 @@ cache_get (block_sector_t sector_idx)
   struct list_elem* e;
   for(e  = list_begin (&cache_list);
       e != list_end (&cache_list);
-      e  = list_next(e))
+      e  = list_next (e))
   {
-    cache_desc_t *d = list_entry(e, cache_desc_t, elem);
-    if (d->sector_idx == sector_idx)
+    cache_desc_t *d = list_entry (e, cache_desc_t, elem);
+    if (d->sector_idx == sector_idx) {
       return d;
+    }
   }
   return NULL;
 }
