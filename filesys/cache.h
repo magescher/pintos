@@ -14,7 +14,7 @@ typedef struct cache_desc {
   struct condition *cond;
 
   struct inode *inode;
-  uint8_t *blk;
+  void *blk;
 
   struct list_elem elem;
 } cache_desc_t;
