@@ -5,14 +5,15 @@
 #include "lib/kernel/list.h"
 #include "filesys/off_t.h"
 #include "devices/block.h"
+#include "threads/synch.h"
 
 typedef struct cache_desc {
   block_sector_t sector_idx;
   bool dirty;
   bool accessed;
 
-  struct lock *lock;
-  struct condition *cond;
+  struct lock lock;
+  struct condition cond;
 
   struct inode *inode;
   void *blk;

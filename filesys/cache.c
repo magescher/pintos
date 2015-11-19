@@ -1,6 +1,7 @@
 #include "filesys/cache.h"
 #include "filesys/filesys.h"
-#include "threads/synch.h"
+#include "threads/malloc.h"
+#include "lib/string.h"
 
 #define CACHE_MAX 64
 
