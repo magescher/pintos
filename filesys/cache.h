@@ -11,6 +11,7 @@ typedef struct cache_desc {
   bool dirty;
   bool accessed;
 
+  struct lock *lock;
   struct condition *cond;
 
   struct inode *inode;
