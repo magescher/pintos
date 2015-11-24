@@ -16,7 +16,7 @@ typedef struct cache_desc {
   struct condition cond;
 
   struct inode *inode;
-  void *blk;
+  uint8_t *blk;
 
   struct list_elem elem;
 } cache_desc_t;
@@ -36,10 +36,10 @@ struct cache_desc *cache_get (block_sector_t sector_idx);
 void cache_put (cache_desc_t *d);
 
 // read cache block from disk, returns pointer to data
-void *cache_read (cache_desc_t *d);
+uint8_t *cache_read (cache_desc_t *d);
 
 // fill cache block with zeros, returns pointer to data
-void *cache_zero (cache_desc_t *d);
+uint8_t *cache_zero (cache_desc_t *d);
 
 // mark cache block dirty (must be written back)
 void cache_mark_dirty (cache_desc_t *d);
