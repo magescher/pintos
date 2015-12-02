@@ -48,10 +48,11 @@ static block_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) 
 {
   ASSERT (inode != NULL);
-  if (pos < inode->data.length)
+  if (pos < inode->data.length) {
     return inode->data.start + pos / BLOCK_SECTOR_SIZE;
-  else
+  } else {
     return -1;
+  }
 }
 
 /* List of open inodes, so that opening a single inode twice
@@ -82,7 +83,8 @@ inode_create (block_sector_t sector, off_t length)
      one sector in size, and you should fix that. */
   ASSERT (sizeof *disk_inode == BLOCK_SECTOR_SIZE);
 
-  disk_inode = calloc (1, sizeof *disk_inode);
+  cache_desc_t *d = cache_get_desc (sector, true);
+  disk_inode = (struct inode_disk *) cache_zero (d);
   if (disk_inode != NULL)
     {
       size_t sectors = bytes_to_sectors (length);
@@ -90,18 +92,19 @@ inode_create (block_sector_t sector, off_t length)
       disk_inode->magic = INODE_MAGIC;
       if (free_map_allocate (sectors, &disk_inode->start)) 
         {
-          block_write (fs_device, sector, disk_inode);
+          cache_mark_dirty (d);
           if (sectors > 0) 
             {
-              static char zeros[BLOCK_SECTOR_SIZE];
               size_t i;
               
-              for (i = 0; i < sectors; i++) 
-                block_write (fs_device, disk_inode->start + i, zeros);
+              for (i = 0; i < sectors; i++) {
+                d = cache_get_desc (disk_inode->start + i, true);
+                cache_zero (d);
+                cache_mark_dirty (d);
+              }
             }
           success = true; 
         } 
-      free (disk_inode);
     }
   return success;
 }
@@ -138,7 +141,11 @@ inode_open (block_sector_t sector)
   inode->open_cnt = 1;
   inode->deny_write_cnt = 0;
   inode->removed = false;
-  block_read (fs_device, inode->sector, &inode->data);
+
+  cache_desc_t *d = cache_get_desc (sector, true);
+  uint8_t *bounce = cache_read (d);
+  memcpy (&inode->data, bounce, BLOCK_SECTOR_SIZE);
+
   return inode;
 }
 
@@ -177,6 +184,11 @@ inode_close (struct inode *inode)
       /* Deallocate blocks if removed. */
       if (inode->removed) 
         {
+          cache_desc_t *desc = cache_get_desc(inode->sector, false);
+          if (desc->dirty) {
+            block_write (fs_device, desc->sector_idx, desc->blk);
+          }
+
           free_map_release (inode->sector, 1);
           free_map_release (inode->data.start,
                             bytes_to_sectors (inode->data.length)); 
@@ -223,6 +235,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
 
       cache_desc_t *d = cache_get_desc (sector_idx, false);
       bounce = cache_read (d);
+      ASSERT (bounce != NULL);
       memcpy(buffer + bytes_read, bounce + sector_ofs, chunk_size);
 
       /* Advance. */
@@ -272,7 +285,9 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       } else {
         bounce = cache_zero (d);
       }
+      ASSERT (bounce != NULL);
       memcpy (bounce + sector_ofs, buffer + bytes_written, chunk_size);
+      cache_mark_dirty (d);
 
       /* Advance. */
       size -= chunk_size;

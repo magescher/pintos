@@ -128,7 +128,9 @@ uint8_t *
 cache_zero (cache_desc_t *d)
 {
   lock_acquire (&d->lock);
-  memset (d->blk, 0, BLOCK_SECTOR_SIZE);
+  if (!d->accessed) {
+    memset (d->blk, 0, BLOCK_SECTOR_SIZE);
+  }
   d->accessed = true;
   lock_release (&d->lock);
   return d->blk;
