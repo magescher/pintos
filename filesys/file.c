@@ -166,3 +166,13 @@ file_tell (struct file *file)
   ASSERT (file != NULL);
   return file->pos;
 }
+
+bool file_isdir (struct file *)
+{
+  return file->inode->dir;
+}
+
+int file_inumber (struct file *)
+{
+  return file->inode->sector;
+}

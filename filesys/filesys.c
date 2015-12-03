@@ -42,6 +42,7 @@ filesys_done (void)
    Returns true if successful, false otherwise.
    Fails if a file named NAME already exists,
    or if internal memory allocation fails. */
+// TODO: add is_dir argument to create directories
 bool
 filesys_create (const char *name, off_t initial_size) 
 {
@@ -63,6 +64,7 @@ filesys_create (const char *name, off_t initial_size)
    otherwise.
    Fails if no file named NAME exists,
    or if an internal memory allocation fails. */
+// TODO: if NAME is a directory, open it
 struct file *
 filesys_open (const char *name)
 {

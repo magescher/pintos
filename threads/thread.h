@@ -104,6 +104,8 @@ struct thread
     struct semaphore exit_sema;         /* Thread is allowed to exit. */
     int rc;                             /* Return code. */
 
+    struct dir* cwd;                    /* Current working directory. */
+
     struct hash spage_table;            /* Supplemental page table. */
     struct lock lock_pd;                /* Page directory lock. */
     struct hash map_table;

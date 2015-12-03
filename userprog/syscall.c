@@ -401,6 +401,88 @@ SYSCALL_FUNC(munmap)
   mmap_destroy (mapping);
 }
 
+static void
+SYSCALL_FUNC(chdir)
+{
+  CHECK_ARGS(1);
+  const char *dir = *(const char **) arg0;
+
+  check_user_str (f, dir);
+
+  struct thread *t = thread_current ();
+  t->cwd = filesys_chdir (dir);
+
+  f->eax = (t->cwd != NULL);
+}
+
+
+static void
+SYSCALL_FUNC(mkdir)
+{
+  CHECK_ARGS(1);
+  const char *dir = *(const char **) arg0;
+
+  check_user_str (f, dir);
+
+  // TODO: add is_dir flag to filesys_create
+  f->eax = filesys_create (dir, 0, true);
+}
+
+
+static void
+SYSCALL_FUNC(readdir)
+{
+  CHECK_ARGS(2);
+  int fd     = *(int *) arg0;
+  char *name = *(char **) arg1;
+
+  check_user_str (f, name);
+  struct fd *file = fd_lookup (fd);
+
+  if (file != NULL) {
+    if (file_isdir (file->file)) {
+      // TODO: needs implementation
+      struct dir *dir = (struct dir *) file->file;
+      f->eax = dir_readdir (dir, name);
+    } else {
+      f->eax = false;
+    }
+  } else {
+    f->eax = false;
+  }
+}
+
+
+static void
+SYSCALL_FUNC(isdir)
+{
+  CHECK_ARGS(1);
+  int fd = *(int *) arg0;
+
+  struct fd *file = fd_lookup (fd);
+
+  if (file != NULL) {
+    f->eax = file_isdir (file->file);
+  } else {
+    f->eax = false;
+  }
+}
+
+
+static void
+SYSCALL_FUNC(inumber)
+{
+  CHECK_ARGS(1);
+  int fd = *(int *) arg0;
+
+  struct fd *file = fd_lookup (fd);
+  if (file != NULL) {
+    f->eax = file_inumber (file->file);
+  } else {
+    f->eax = -1;
+  }
+}
+
 /* used to generate switch statement code */
 #define SYSCALL_CALL(name)                       \
   syscall_handler_ ## name (arg0, arg1, arg2, f); \
@@ -433,6 +515,11 @@ syscall_handler (struct intr_frame *f)
   case SYS_CLOSE:    SYSCALL_CALL(close);
   case SYS_MMAP:     SYSCALL_CALL(mmap);
   case SYS_MUNMAP:   SYSCALL_CALL(munmap);
+  case SYS_CHDIR:    SYSCALL_CALL(chdir);
+  case SYS_MKDIR:    SYSCALL_CALL(mkdir);
+  case SYS_READDIR:  SYSCALL_CALL(readdir);
+  case SYS_ISDIR:    SYSCALL_CALL(isdir);
+  case SYS_INUMBER:  SYSCALL_CALL(inumber);
   }
 }
 
