@@ -33,11 +33,12 @@ get_path (char* name)
   struct inode *node = NULL;
   for (i = 1; i < len; i++) {
     if (name[i] == '/') {
-      fn = (char *)(name+i+1);
+      name[i] = '\0';
       if (!dir_lookup (cwd, fn, &node)) {
         /* invalid path, what are you doing?! */
         return NULL;
       }
+      fn = (char *)(name+i+1);
       if (inode_isdir (node)) {
         dir_close (cwd);
         cwd = dir_open (node);
@@ -121,14 +122,19 @@ filesys_create (const char *name, off_t initial_size, bool is_dir)
 struct file *
 filesys_open (const char *name)
 {
-  struct dir *dir = dir_open_root ();
+  FILENAME_COPY (name);
+  struct dir *dir = get_path(filename);
   struct inode *inode = NULL;
 
   if (dir != NULL)
     dir_lookup (dir, name, &inode);
   dir_close (dir);
 
-  return file_open (inode);
+  if (inode_isdir (inode)) {
+    return (struct file *) dir_open (inode);
+  } else {
+    return file_open (inode);
+  }
 }
 
 /* Deletes the file named NAME.

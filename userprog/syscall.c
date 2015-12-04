@@ -277,7 +277,7 @@ SYSCALL_FUNC(write)
   } else {
     struct fd *file = fd_lookup (fd);
 
-    if (file != NULL) {
+    if (file != NULL && !file_isdir (file->file)) {
       lock_acquire (&syscall_lock);
       f->eax = file_write (file->file, buf, size);
       lock_release (&syscall_lock);

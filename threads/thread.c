@@ -158,7 +158,11 @@ void
 fd_destroy (struct hash_elem *p, void *t UNUSED)
 {
   const struct fd *e = hash_entry (p, struct fd, hash_elem);
-  file_close (e->file);
+  if (file_isdir (e->file)) {
+    dir_close (e->file);
+  } else {
+    file_close (e->file);
+  }
   free ((void *) e);
 }
 
