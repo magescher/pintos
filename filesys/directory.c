@@ -157,6 +157,9 @@ dir_add (struct dir *dir, const char *name, block_sector_t inode_sector)
   ASSERT (dir != NULL);
   ASSERT (name != NULL);
 
+  if (inode_removed(dir->inode))
+    return false;
+
   /* Check NAME for validity. */
   if (*name == '\0' || strlen (name) > NAME_MAX)
     return false;
@@ -210,6 +213,21 @@ dir_remove (struct dir *dir, const char *name)
   if (inode == NULL)
     goto done;
 
+  char tmp[NAME_MAX + 1];
+  struct dir *d = dir_open(inode);
+  if (strcmp(name, dir_parent)
+      && strcmp(name, dir_self)
+      && dir_readdir(d, tmp)) {
+    goto done;
+  }
+
+  if (inode_isdir(inode)
+      && strcmp(name, dir_self)
+      && strcmp(name, dir_parent)) {
+    dir_remove(d, dir_self);
+    dir_remove(d, dir_parent);
+  }
+
   /* Erase directory entry. */
   e.in_use = false;
   if (inode_write_at (dir->inode, &e, sizeof e, ofs) != sizeof e) 
@@ -235,7 +253,7 @@ dir_readdir (struct dir *dir, char name[NAME_MAX + 1])
   while (inode_read_at (dir->inode, &e, sizeof e, dir->pos) == sizeof e) 
     {
       dir->pos += sizeof e;
-      if (e.in_use)
+      if (e.in_use && strcmp(e.name, ".") && strcmp(e.name, ".."))
         {
           strlcpy (name, e.name, NAME_MAX + 1);
           return true;

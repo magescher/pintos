@@ -22,14 +22,20 @@ struct dir *
 get_path (char* name)
 {
   int i, len = strlen (name);
+
+  if (len == 0) {
+    return NULL;
+  }
+
   struct thread *t = thread_current ();
   struct dir* cwd = dir_reopen (t->cwd);
+  char *fn = name;
   if (name[0] == '/') {
     cwd = dir_open_root();
+    fn = name+1;
   }
   ASSERT (cwd != NULL);
 
-  char *fn = name;
   struct inode *node = NULL;
   for (i = 1; i < len; i++) {
     if (name[i] == '/') {
@@ -125,9 +131,16 @@ filesys_open (const char *name)
   FILENAME_COPY (name);
   struct dir *dir = get_path(filename);
   struct inode *inode = NULL;
+  if (dir == NULL) {
+    return NULL;
+  }
+
+  if (filename[0] == '\0') {
+    return (struct file *) dir_open_root ();
+  }
 
   if (dir != NULL)
-    dir_lookup (dir, name, &inode);
+    dir_lookup (dir, filename, &inode);
   dir_close (dir);
 
   if (inode_isdir (inode)) {
@@ -144,8 +157,9 @@ filesys_open (const char *name)
 bool
 filesys_remove (const char *name) 
 {
-  struct dir *dir = dir_open_root ();
-  bool success = dir != NULL && dir_remove (dir, name);
+  FILENAME_COPY (name);
+  struct dir *dir = get_path (filename);
+  bool success = dir != NULL && dir_remove (dir, filename);
   dir_close (dir); 
 
   return success;

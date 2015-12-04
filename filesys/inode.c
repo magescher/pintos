@@ -350,7 +350,17 @@ inode_length (const struct inode *inode)
 bool
 inode_isdir (const struct inode *inode)
 {
-  return inode->data.dir;
+  if (inode != NULL) {
+    return inode->data.dir;
+  } else {
+    return false;
+  }
+}
+
+bool
+inode_removed (const struct inode *inode)
+{
+  return inode->removed;
 }
 
 int

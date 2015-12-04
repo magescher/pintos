@@ -440,7 +440,6 @@ SYSCALL_FUNC(readdir)
 
   if (file != NULL) {
     if (file_isdir (file->file)) {
-      // TODO: needs implementation
       struct dir *dir = (struct dir *) file->file;
       f->eax = dir_readdir (dir, name);
     } else {
