@@ -23,7 +23,7 @@ get_path (char* name)
 {
   int i, len = strlen (name);
   struct thread *t = thread_current ();
-  struct dir* cwd = t->cwd;
+  struct dir* cwd = dir_reopen (t->cwd);
   if (name[0] == '/') {
     cwd = dir_open_root();
   }
