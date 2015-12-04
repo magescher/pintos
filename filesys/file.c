@@ -167,12 +167,12 @@ file_tell (struct file *file)
   return file->pos;
 }
 
-bool file_isdir (struct file *)
+bool file_isdir (struct file *file)
 {
-  return file->inode->dir;
+  return inode_isdir (file->inode);
 }
 
-int file_inumber (struct file *)
+int file_inumber (struct file *file)
 {
-  return file->inode->sector;
+  return inode_inumber (file->inode);
 }

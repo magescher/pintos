@@ -232,6 +232,7 @@ thread_create (const char *name, int priority,
   mmap_init (t);
   hash_init (&t->fds, fd_hash, fd_less, t);
   t->parent = thread_current ();
+  t->cwd = t->parent->cwd;
 
   intr_set_level (old_level);
 

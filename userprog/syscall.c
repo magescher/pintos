@@ -148,7 +148,7 @@ SYSCALL_FUNC(create)
   }
 
   lock_acquire (&syscall_lock);
-  f->eax = filesys_create (file, size);
+  f->eax = filesys_create (file, size, false);
   lock_release (&syscall_lock);
   return;
 }
@@ -424,7 +424,6 @@ SYSCALL_FUNC(mkdir)
 
   check_user_str (f, dir);
 
-  // TODO: add is_dir flag to filesys_create
   f->eax = filesys_create (dir, 0, true);
 }
 

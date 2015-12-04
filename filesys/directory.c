@@ -21,12 +21,21 @@ struct dir_entry
     bool in_use;                        /* In use or free? */
   };
 
+static const char *dir_self = ".";
+static const char *dir_parent = "..";
+
 /* Creates a directory with space for ENTRY_CNT entries in the
    given SECTOR.  Returns true if successful, false on failure. */
 bool
 dir_create (block_sector_t sector, size_t entry_cnt)
 {
-  return inode_create (sector, entry_cnt * sizeof (struct dir_entry));
+  bool success = inode_create (sector, entry_cnt * sizeof (struct dir_entry), true);
+  if (success) {
+        struct dir *dir = dir_open(inode_open (sector));
+        dir_add(dir, dir_self, sector);
+        dir_add(dir, dir_parent, inode_inumber(dir->inode));
+  }
+  return success;
 }
 
 /* Opens and returns the directory for the given INODE, of which
