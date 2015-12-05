@@ -7,19 +7,24 @@
 #include "filesys/free-map.h"
 #include "filesys/cache.h"
 #include "threads/malloc.h"
+#include "devices/timer.h"
+#include "threads/thread.h"
 
 /* Identifies an inode. */
 #define INODE_MAGIC 0x494e4f44
+
+#define INDEX_D(pos) ((pos>>9)%128)
+#define INDEX_T(pos) ((pos>>16))
+
+static const char zeros[BLOCK_SECTOR_SIZE];
 
 /* On-disk inode.
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
 struct inode_disk
   {
-    block_sector_t start;               /* First data sector. */
+    block_sector_t dd[126];             /* Not used. */
     off_t length;                       /* File size in bytes. */
     bool dir;                           /* True if file is a directory. */
-    unsigned magic;                     /* Magic number. */
-    uint32_t unused[124];               /* Not used. */
   };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -41,18 +46,37 @@ struct inode
     struct inode_disk data;             /* Inode content. */
   };
 
+static inline block_sector_t
+block (struct inode_disk *disk, off_t pos)
+{
+  block_sector_t bb[128];
+  if (INDEX_T(pos) > INDEX_T(disk->length)) {
+    ASSERT(free_map_allocate (1, &disk->dd[INDEX_T(pos)]));
+  }
+  block_read (fs_device, disk->dd[INDEX_T(pos)], bb);
+  if (INDEX_D(pos) > INDEX_D(disk->length)) {
+    ASSERT(free_map_allocate (1, &bb[INDEX_D(pos)]));
+    block_write (fs_device, bb[INDEX_D(pos)], zeros);
+    block_write (fs_device, disk->dd[INDEX_T(pos)], bb);
+    disk->length += BLOCK_SECTOR_SIZE;
+  } 
+  ASSERT (bb[INDEX_D(pos)]);
+  return bb[INDEX_D(pos)];
+}
+
 /* Returns the block device sector that contains byte offset POS
    within INODE.
    Returns -1 if INODE does not contain data for a byte at offset
    POS. */
 static block_sector_t
-byte_to_sector (const struct inode *inode, off_t pos) 
+byte_to_sector (struct inode *inode, off_t pos) 
 {
   ASSERT (inode != NULL);
-  if (pos < inode->data.length)
-    return inode->data.start + pos / BLOCK_SECTOR_SIZE;
-  else
+  if (pos < inode->data.length) {
+    return block(&inode->data, pos);
+  } else {
     return -1;
+  }
 }
 
 /* List of open inodes, so that opening a single inode twice
@@ -86,25 +110,27 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
   disk_inode = calloc (1, sizeof *disk_inode);
   if (disk_inode != NULL)
     {
-      size_t sectors = bytes_to_sectors (length);
+      int i;
+
+      block_sector_t bb[128];
+      ASSERT(free_map_allocate (1, &disk_inode->dd[0]));
+      block_read (fs_device, disk_inode->dd[0], bb);
+      ASSERT(free_map_allocate (1, &bb[0]));
+      block_write (fs_device, bb[0], zeros);
+      block_write (fs_device, disk_inode->dd[0], bb);
+      disk_inode->length += BLOCK_SECTOR_SIZE;
+
+      for (i = 0; i < length + BLOCK_SECTOR_SIZE; i += BLOCK_SECTOR_SIZE) {
+        block_sector_t f = block (disk_inode, i);
+        printf ("ic:b:%d[%d] -> %d\n", sector, i, f);
+      }
       disk_inode->dir = is_dir;
-      disk_inode->length = length;
-      disk_inode->magic = INODE_MAGIC;
-      if (free_map_allocate (sectors, &disk_inode->start)) 
-        {
-          block_write (fs_device, sector, disk_inode);
-          if (sectors > 0) 
-            {
-              static char zeros[BLOCK_SECTOR_SIZE];
-              size_t i;
-              
-              for (i = 0; i < sectors; i++) 
-                block_write (fs_device, disk_inode->start + i, zeros);
-            }
-          success = true; 
-        } 
+      ASSERT (disk_inode->length >= length);
+      block_write (fs_device, sector, disk_inode);
       free (disk_inode);
+      success = true;
     }
+  printf ("%d:c[%d][%d]\n", thread_current ()->tid, sector, length);
   return success;
 }
 
@@ -141,6 +167,7 @@ inode_open (block_sector_t sector)
   inode->deny_write_cnt = 0;
   inode->removed = false;
   block_read (fs_device, inode->sector, &inode->data);
+  printf ("%d:o[%d]\n", thread_current ()->tid, inode->sector);
   return inode;
 }
 
@@ -179,9 +206,17 @@ inode_close (struct inode *inode)
       /* Deallocate blocks if removed. */
       if (inode->removed) 
         {
+          int i,j;
+          block_sector_t bb[128];
+          for (i = 0; i < INDEX_T(inode->data.length); i++) {
+            block_read (fs_device, inode->data.dd[i], bb);
+            for (j = 0; j < INDEX_D(inode->data.length); j++) {
+              free_map_release (bb[j], 1);
+            }
+            free_map_release (inode->data.dd[i], 1);
+          }
+
           free_map_release (inode->sector, 1);
-          free_map_release (inode->data.start,
-                            bytes_to_sectors (inode->data.length)); 
         }
 
       free (inode); 
@@ -211,6 +246,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
     {
       /* Disk sector to read, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode, offset);
+      printf ("%d:r[%d][%d] -> %d\n", thread_current ()->tid, inode->sector, offset, sector_idx);
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -249,6 +285,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
     }
   free (bounce);
 
+  hex_dump (0, buffer, bytes_read, true);
   return bytes_read;
 }
 
@@ -268,10 +305,12 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   if (inode->deny_write_cnt)
     return 0;
 
+  printf ("iw:%d[%d] (len=%d)\n", inode->sector, offset, size);
   while (size > 0) 
     {
       /* Sector to write, starting byte offset within sector. */
       block_sector_t sector_idx = byte_to_sector (inode, offset);
+      printf ("%d:w[%d][%d] -> %d\n", thread_current ()->tid, inode->sector, offset, sector_idx);
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
@@ -317,6 +356,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
     }
   free (bounce);
 
+  hex_dump (0, buffer, size, true);
   return bytes_written;
 }
 
