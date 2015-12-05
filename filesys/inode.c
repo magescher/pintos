@@ -60,7 +60,6 @@ block (struct inode_disk *disk, off_t pos)
     block_write (fs_device, disk->dd[INDEX_T(pos)], bb);
     disk->length += BLOCK_SECTOR_SIZE;
   } 
-  ASSERT (bb[INDEX_D(pos)]);
   return bb[INDEX_D(pos)];
 }
 
