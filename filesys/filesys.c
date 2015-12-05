@@ -38,12 +38,6 @@ get_path (char* name)
 
   struct inode *node = NULL;
 
-  i = 1;
-  if (name[i] == '/') {
-    fn = name+2;
-    i = 2;
-  }
-
   for (; i < len; i++) {
     if (name[i] == '/') {
       name[i] = '\0';
