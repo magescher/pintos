@@ -80,7 +80,9 @@ byte_to_sector (struct inode *inode, off_t pos)
 {
   ASSERT (inode != NULL);
   if (pos < inode->data.length) {
-    return block(&inode->data, pos);
+    block_sector_t x = block(&inode->data, pos);
+    block_write (fs_device, inode->sector, &inode->data);
+    return x;
   } else {
     return -1;
   }

@@ -37,7 +37,14 @@ get_path (char* name)
   ASSERT (cwd != NULL);
 
   struct inode *node = NULL;
-  for (i = 1; i < len; i++) {
+
+  i = 1;
+  if (name[i] == '/') {
+    fn = name+2;
+    i = 2;
+  }
+
+  for (; i < len; i++) {
     if (name[i] == '/') {
       name[i] = '\0';
       if (!dir_lookup (cwd, fn, &node)) {
