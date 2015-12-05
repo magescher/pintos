@@ -22,7 +22,8 @@ static const char zeros[BLOCK_SECTOR_SIZE];
    Must be exactly BLOCK_SECTOR_SIZE bytes long. */
 struct inode_disk
   {
-    block_sector_t dd[126];             /* Not used. */
+    block_sector_t dd[125];             /* Not used. */
+    off_t flength;                       /* File size in bytes. */
     off_t length;                       /* File size in bytes. */
     bool dir;                           /* True if file is a directory. */
   };
@@ -131,6 +132,7 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
       }
       disk_inode->dir = is_dir;
       ASSERT (disk_inode->length >= length);
+      disk_inode->flength = length;
       block_write (fs_device, sector, disk_inode);
       free (disk_inode);
       success = true;
@@ -252,7 +254,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset)
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
-      off_t inode_left = inode_length (inode) - offset;
+      off_t inode_left = inode->data.length - offset;
       int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
       int min_left = inode_left < sector_left ? inode_left : sector_left;
 
@@ -319,7 +321,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       int sector_ofs = offset % BLOCK_SECTOR_SIZE;
 
       /* Bytes left in inode, bytes left in sector, lesser of the two. */
-      off_t inode_left = inode_length (inode) - offset;
+      off_t inode_left = inode->data.length - offset;
       int sector_left = BLOCK_SECTOR_SIZE - sector_ofs;
       int min_left = inode_left < sector_left ? inode_left : sector_left;
 
@@ -359,6 +361,10 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
       offset += chunk_size;
       bytes_written += chunk_size;
     }
+  if (size + offset > inode_length (inode)) {
+    inode->data.flength = size + offset;
+    block_write (fs_device, inode->sector, &inode->data);
+  }
   free (bounce);
 
   return bytes_written;
@@ -388,7 +394,7 @@ inode_allow_write (struct inode *inode)
 off_t
 inode_length (const struct inode *inode)
 {
-  return inode->data.length;
+  return inode->data.flength;
 }
 
 bool
