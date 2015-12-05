@@ -50,12 +50,19 @@ static inline block_sector_t
 block (struct inode_disk *disk, off_t pos)
 {
   block_sector_t bb[128];
-  while (INDEX_T(pos) > INDEX_T((disk->length-1))) {
+  if (INDEX_T(pos) > INDEX_T((disk->length-1))) {
     ASSERT (free_map_allocate (1, &disk->dd[INDEX_T(pos)]));
+
+    block_read (fs_device, disk->dd[INDEX_T(pos)], bb);
+    ASSERT(free_map_allocate (1, &bb[0]));
+    block_write (fs_device, bb[0], zeros);
+    block_write (fs_device, disk->dd[INDEX_T(pos)], bb);
+    disk->length += BLOCK_SECTOR_SIZE;
   }
   block_read (fs_device, disk->dd[INDEX_T(pos)], bb);
-  while (INDEX_D(pos) > INDEX_D((disk->length-1))) {
+  if (INDEX_D(pos) > INDEX_D((disk->length-1))) {
     ASSERT (free_map_allocate (1, &bb[INDEX_D(pos)]));
+    block_write (fs_device, bb[INDEX_D(pos)], zeros);
     block_write (fs_device, disk->dd[INDEX_T(pos)], bb);
     disk->length += BLOCK_SECTOR_SIZE;
     ASSERT (bb[INDEX_D(pos)] != 0);
@@ -119,7 +126,7 @@ inode_create (block_sector_t sector, off_t length, bool is_dir)
       block_write (fs_device, disk_inode->dd[0], bb);
       disk_inode->length += BLOCK_SECTOR_SIZE;
 
-      for (i = 1; i < length + BLOCK_SECTOR_SIZE; i += BLOCK_SECTOR_SIZE) {
+      for (i = 0; i < length + BLOCK_SECTOR_SIZE; i += BLOCK_SECTOR_SIZE) {
         block_sector_t f = block (disk_inode, i);
       }
       disk_inode->dir = is_dir;
@@ -303,6 +310,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
   for (i = 1; i < size + offset + BLOCK_SECTOR_SIZE; i += BLOCK_SECTOR_SIZE) {
     block (&inode->data, i);
   }
+  block_write (fs_device, inode->sector, &inode->data);
+
   while (size > 0) 
     {
       /* Sector to write, starting byte offset within sector. */
